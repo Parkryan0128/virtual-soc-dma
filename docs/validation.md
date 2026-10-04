@@ -32,11 +32,11 @@ The full device suite contains **10 native QTest cases**, with parameterized tra
 
 ## Clean-build and CI status
 
-A source-only fresh-container run completed successfully with exit status 0. Its source archive excluded `build/`, `artifacts/`, and `.git`: pinned QEMU and all firmware were built again from source. The previous clean build passed its original six firmware scenarios. The expanded source-only check adds lifecycle firmware, runner failure tests, and the short demo; its final result is recorded below when verified.
+A source-only fresh-container run of source commit `c811f1c1240960d53f9a6d48d05386bc2834a6fa` completed successfully with exit status 0 on Linux arm64. Its source archive excluded `build/`, `artifacts/`, and `.git`: pinned QEMU and all eight firmware images were built again from source. The full suite passed **11/11 groups** (runner, platform, QTest, and eight guest scenarios); the short demo passed **6/6 groups**. The cancellation race exercised 26 successful aborts and 102 preserved completions.
 
-The hosted GitHub Actions Linux validation completed successfully for implementation commit `faa2afeeb0a2d47c1e727e824dd914395507a94f`. It independently built the source-only Linux container and ran the complete device, platform, and firmware suite. [Successful CI run](https://github.com/Parkryan0128/virtual-soc-dma/actions/runs/37171162478).
+Hosted Linux x86-64 validation completed successfully for this exact source commit. It independently built the development image and source-only fresh container, then passed the full suite and short demo. [Successful final CI run](https://github.com/Parkryan0128/virtual-soc-dma/actions/runs/37174177012).
 
-The follow-up completion audit adds foreground driver cancellation/reset, lifecycle firmware, a scenario manifest, runner failure tests, and a dedicated short demo. The final expanded code is undergoing fresh-container and hosted-CI validation; the earlier linked run validates the earlier implementation, not these additional changes.
+The final documentation commit only records these observed results and lifecycle semantics; executable source matches the tested commit.
 
 ## Evidence locations
 

@@ -2,7 +2,7 @@
 
 A software-only virtual platform for developing and testing a DMA driver before hardware exists.
 
-**Status: implementation complete; final expanded validation in progress. Native device tests and real RV32 firmware scenarios pass locally in a Linux container. See [validation evidence](docs/validation.md) for the tested environment and CI status.**
+**Status: all planned milestones complete. The full suite and demo pass in a fresh Linux arm64 container and hosted Linux x86-64 CI. See [validation evidence](docs/validation.md) for the tested environment and CI status.**
 
 ## What this project does
 

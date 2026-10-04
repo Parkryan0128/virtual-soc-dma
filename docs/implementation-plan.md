@@ -2,7 +2,7 @@
 
 ## Progress
 
-All milestones 0–5 have implementations; the final expanded clean-build/CI gate is in progress. Incremental acceptance gates passed, the source-only fresh Linux container passed the full suite, and hosted GitHub Actions validation succeeded. Actual environment/results are recorded in [validation.md](validation.md). The sections below preserve the gate definitions used for implementation.
+All milestones 0–5 and their acceptance gates are complete. The final expanded source passed the full suite and short demo in a source-only fresh Linux arm64 container and hosted Linux x86-64 GitHub Actions. Actual environment/results are recorded in [validation.md](validation.md). The sections below preserve the gate definitions used for implementation.
 
 ## Objective and boundary
 
