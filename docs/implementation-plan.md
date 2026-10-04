@@ -2,13 +2,13 @@
 
 ## Progress
 
-All milestones 0–5 are complete. Incremental acceptance gates passed, the source-only fresh Linux container passed the full suite, and hosted GitHub Actions validation succeeded. Actual environment/results are recorded in [validation.md](validation.md). The sections below preserve the gate definitions used for implementation.
+All milestones 0–5 have implementations; the final expanded clean-build/CI gate is in progress. Incremental acceptance gates passed, the source-only fresh Linux container passed the full suite, and hosted GitHub Actions validation succeeded. Actual environment/results are recorded in [validation.md](validation.md). The sections below preserve the gate definitions used for implementation.
 
 ## Objective and boundary
 
 Deliver one executable demonstration of pre-silicon software validation: boot a RISC-V firmware binary on a virtual platform, control a custom DMA device through MMIO, handle interrupts, and recover from injected failures.
 
-This plan implements the [v1 contract](device-spec.md). Complete milestones in order. Each acceptance gate requires observed results, not merely code or sample output. Do not add extra peripherals or performance claims while a v1 gate is incomplete.
+This plan implements the [device contract](device-spec.md). Complete milestones in order. Each acceptance gate requires observed results, not merely code or sample output. Do not add extra peripherals or performance claims while an acceptance gate is incomplete.
 
 ## Planned repository layout
 
@@ -127,7 +127,7 @@ Each firmware scenario runs in a fresh QEMU process except repeated-transfer and
 - **Interrupt bugs:** retain polling as a diagnostic path; compare device-line tests with actual firmware trap tests.
 - **False recovery:** assert no late writes and use distinct buffers/patterns for the post-reset transfer.
 - **Misleading timing:** report functional correctness and scheduling behavior only; no bandwidth/speedup benchmarks.
-- **Scope growth:** finish one-channel bare-metal v1 before considering OS drivers, SystemC, or RTL.
+- **Scope growth:** finish the one-channel bare-metal scope before considering OS drivers, SystemC, or RTL.
 
 ## Definition of done
 

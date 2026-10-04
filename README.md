@@ -2,7 +2,7 @@
 
 A software-only virtual platform for developing and testing a DMA driver before hardware exists.
 
-**Status: v1 implemented. Native device tests and real RV32 firmware scenarios pass locally in a Linux container. See [validation evidence](docs/validation.md) for the tested environment and CI status.**
+**Status: implementation complete; final expanded validation in progress. Native device tests and real RV32 firmware scenarios pass locally in a Linux container. See [validation evidence](docs/validation.md) for the tested environment and CI status.**
 
 ## What this project does
 
@@ -10,7 +10,7 @@ Run a real cross-compiled RISC-V firmware binary inside QEMU. The firmware progr
 
 Example: firmware requests a 1 KiB copy, continues a small CPU task while the device is busy, receives completion, and checks the destination. Another run deliberately stalls the DMA; the driver reaches its deadline, resets the device, and proves that a subsequent transfer works.
 
-## v1 scope
+## Project scope
 
 | Component | Decision |
 | --- | --- |
@@ -59,16 +59,18 @@ Integration: add an opt-in DMA option to the existing `virt` board, reserve its 
 6. Abort/reset before completion prevent stale memory writes and late interrupts.
 7. Device tests and firmware tests run automatically with nonzero exit status on failure; CI preserves useful traces.
 
-## Explicitly outside v1
+## Project boundaries
 
 CPU/ISA implementation, RTL, FPGA deployment, SystemC co-simulation, Linux/kernel drivers, multicore, caches/coherency, IOMMU, PCIe, scatter-gather, multiple DMA channels, GUI, and bus arbitration modeling.
 
-The completion delay is a configurable virtual-time scheduling aid. It does **not** model real bandwidth, cache behavior, bus contention, or chip performance. The model makes the whole copy visible at its completion event; partial transfer visibility is outside v1. CPU work during a pending transfer demonstrates asynchronous interaction, not a speedup claim.
+The completion delay is a configurable virtual-time scheduling aid. It does **not** model real bandwidth, cache behavior, bus contention, or chip performance. The model makes the whole copy visible at its completion event; partial transfer visibility is outside this project. CPU work during a pending transfer demonstrates asynchronous interaction, not a speedup claim.
 
 ## Documents
 
 - [Device specification](docs/device-spec.md): the shared contract for model, driver, and tests.
 - [Implementation plan](docs/implementation-plan.md): milestones, dependency order, and acceptance gates.
+- [Completion checklist](docs/completion.md): each requirement mapped to code and tests.
+- [Demo](docs/demo.md): commands and observed firmware output.
 
 ## Build and test
 
@@ -78,7 +80,7 @@ From the repository root, with Docker running:
 ./scripts/test-in-container.sh
 ```
 
-This builds the development image, copies only project sources into a fresh Linux container, fetches and builds pinned QEMU, compiles six RV32 firmware images, and runs the full suite. It copies logs and `summary.json` into `artifacts/` and removes its temporary container. No FPGA, host RISC-V toolchain, or host bind mount is needed. The first run needs network access and several minutes to compile QEMU. The Docker route was tested on an Apple Silicon Mac; the build/test processes run on Linux arm64.
+This builds the development image, copies only project sources into a fresh Linux container, fetches and builds pinned QEMU, compiles eight RV32 firmware images, and runs the full suite plus the concise firmware demo. It copies logs and `summary.json` into `artifacts/` and removes its temporary container. No FPGA, host RISC-V toolchain, or host bind mount is needed. The first run needs network access and several minutes to compile QEMU. The Docker route was tested on an Apple Silicon Mac; the build/test processes run on Linux arm64.
 
 Inside the development image or a Linux environment with the dependencies from `Dockerfile` installed:
 
@@ -86,8 +88,18 @@ Inside the development image or a Linux environment with the dependencies from `
 ./scripts/build-firmware.sh
 ./scripts/build-qemu.sh
 python3 scripts/run-tests.py
+python3 scripts/run-tests.py --scenario lifecycle
 ./scripts/run-demo.sh
 ```
+
+To run the short demo directly from macOS/Linux with Docker:
+
+```sh
+make demo
+# equivalent: ./scripts/run-demo.sh --docker
+```
+
+`make test` runs the clean full suite and demo. Inside an already built Linux environment, `./scripts/run-demo.sh` only runs the six demonstration firmware scenarios, without verbose native QTest output.
 
 For incremental work, these commands reuse `build/`. `--stage boot`, `--stage detect`, `--stage polling`, and `--stage irq` restrict the firmware scenarios. Run the default full suite before publishing changes.
 
@@ -100,7 +112,7 @@ Host-only device options:
 -global virtual-dma.drop-irq-next=on
 ```
 
-The model is instantiated by the patched board, not a standalone `-device` command. Unsupported DMA platform configurations are rejected. VM migration/snapshots are outside v1 and the device explicitly blocks migration.
+The model is instantiated by the patched board, not a standalone `-device` command. Unsupported DMA platform configurations are rejected. VM migration/snapshots are outside this project and the device explicitly blocks migration.
 
 ## Debugging
 

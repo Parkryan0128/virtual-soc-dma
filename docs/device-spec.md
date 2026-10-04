@@ -1,6 +1,6 @@
-# DMA device specification — v1
+# DMA device specification
 
-Implemented v1 contract. Model, driver, and tests follow these rules. Any required change must update this document before the affected milestone is accepted.
+Implemented device contract (register interface version 1.0). Model, driver, and tests follow these rules. Any required change must update this document before the affected milestone is accepted.
 
 ## Platform
 
@@ -11,7 +11,7 @@ One RV32 hart, little endian, M-mode bare metal, QEMU TCG, PLIC (`aia=none`), an
 - DMA interrupt: PLIC source 16.
 - UART: reused platform UART at `0x10000000`.
 
-DMA address/IRQ allocation was checked against the pinned board memory map and all existing interrupt assignments. Confirmed values are frozen in `platform/platform.h`, shared by firmware and model integration. The generated DTB must describe the same mapping; firmware may use the fixed header because v1 has one fixed platform.
+DMA address/IRQ allocation was checked against the pinned board memory map and all existing interrupt assignments. Confirmed values are frozen in `platform/platform.h`, shared by firmware and model integration. The generated DTB must describe the same mapping; firmware may use the fixed header because the project has one fixed platform.
 
 ## Register map
 
@@ -90,3 +90,11 @@ Firmware uses guest timer deadlines and an active bounded wait loop so time can 
 | Stall/drop-IRQ | Bounded timeout; diagnostic recorded; reset and fresh transfer succeed |
 
 QTest verifies registers, memory, virtual-clock events, and interrupt wiring. Firmware tests additionally verify instruction execution, driver ordering, traps, PLIC handling, deadlines, and recovery. Both are required; one cannot substitute for the other.
+
+## Firmware driver lifecycle
+
+The single-hart M-mode driver provides `dma_irq_submit`, `dma_irq_wait`, `dma_irq_cancel`, and `dma_irq_reset`. Calls run from foreground firmware, not from an ISR. Only one request may be outstanding. CPU interrupt masking protects changes to shared request state; volatile ISR fields and explicit memory fences publish results before the completion flag.
+
+`dma_irq_cancel` cancels only a BUSY request. It returns -1 for idle or already completed work, preserving a completed request's result for `dma_irq_wait`. A successful cancel removes the outstanding request; waiting on it returns -2. `dma_irq_reset` discards any outstanding result, clears the device and driver request state, drains stale PLIC claims, and re-enables device interrupts. The cumulative IRQ counter is retained for diagnostics.
+
+The lifecycle firmware tests cancellation and reset before completion, old/new destination buffers, no late writes/IRQs, reuse, and completion while device IRQs are disabled followed by enable-after-pending delivery. These complement the native QTests rather than relying only on the model's direct register interface.

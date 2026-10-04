@@ -14,13 +14,47 @@ static void interrupt_restore(uint32_t previous) {
     if (previous & 8u) __asm__ volatile("csrs mstatus, %0" :: "r"(8u) : "memory");
 }
 
-void dma_irq_init(void) {
-    interrupt_lock();
+/* Caller holds the CPU interrupt lock. Reset removes the device source before
+ * draining the PLIC, so an old completion cannot be mistaken for a new one. */
+static void reset_locked(void) {
     dma_write(DMA_COMMAND, DMA_RESET);
-    irq_done = 0; outstanding = 0;
-    /* Reset lowers the source; drain any old PLIC claim before enabling it. */
     uint32_t claim;
     while ((claim = mmio_read(VSOC_PLIC_CLAIM)) != 0) mmio_write(VSOC_PLIC_CLAIM, claim);
+    irq_done = irq_status = irq_error = irq_pending = 0;
+    outstanding = 0;
+    dma_write(DMA_IRQ_ENABLE, 1);
+}
+
+void dma_irq_reset(void) {
+    uint32_t previous = interrupt_lock();
+    reset_locked();
+    interrupt_restore(previous);
+}
+
+int dma_irq_cancel(void) {
+    uint32_t previous = interrupt_lock();
+    /* A completed request still belongs to wait(); cancellation must not
+     * discard its ISR result or silently turn a finished copy into an abort. */
+    if (!outstanding || irq_done || dma_read(DMA_STATUS) != DMA_BUSY) {
+        interrupt_restore(previous);
+        return -1;
+    }
+    dma_write(DMA_COMMAND, DMA_ABORT);
+    /* Masking CPU interrupts does not stop the device timer. Completion can
+     * win between the BUSY read and ABORT; leave that request for wait(). */
+    if (dma_read(DMA_STATUS) != 0) {
+        interrupt_restore(previous);
+        return -1;
+    }
+    irq_done = 0;
+    outstanding = 0;
+    interrupt_restore(previous);
+    return 0;
+}
+
+void dma_irq_init(void) {
+    interrupt_lock();
+    reset_locked();
     mmio_write(VSOC_PLIC_BASE + VSOC_DMA_IRQ * 4, 1);
     mmio_write(VSOC_PLIC_ENABLE, 1u << VSOC_DMA_IRQ);
     mmio_write(VSOC_PLIC_THRESHOLD, 0);
@@ -49,11 +83,7 @@ int dma_irq_wait(DMAResult *result) {
             result->status = dma_read(DMA_STATUS);
             result->error = dma_read(DMA_ERROR_CODE);
             result->pending = dma_read(DMA_IRQ_PENDING);
-            dma_write(DMA_COMMAND, DMA_RESET);
-            uint32_t claim;
-            while ((claim = mmio_read(VSOC_PLIC_CLAIM)) != 0) mmio_write(VSOC_PLIC_CLAIM, claim);
-            outstanding = 0; irq_done = 0;
-            dma_write(DMA_IRQ_ENABLE, 1);
+            reset_locked();
             interrupt_restore(previous);
             return -1;
         }

@@ -21,6 +21,8 @@ static inline int dma_poll(uint32_t *status, uint32_t *error) {
 }
 typedef struct DMAResult { uint32_t status, error, pending; } DMAResult;
 void dma_irq_init(void);
+void dma_irq_reset(void);
+int dma_irq_cancel(void);
 int dma_irq_submit(uint32_t src, uint32_t dst, uint32_t len);
 int dma_irq_wait(DMAResult *result);
 uint32_t dma_irq_count(void);

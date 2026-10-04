@@ -3,7 +3,7 @@ set -eu
 cd "$(dirname "$0")/.."
 mkdir -p build/firmware
 compiler=${RISCV_CC:-riscv64-unknown-elf-gcc}
-for scenario in boot detect polling interrupt stall dropirq; do
+for scenario in boot detect polling interrupt lifecycle cancel_race stall dropirq; do
 source="firmware/tests/$scenario.c"
 extra=
 case "$scenario" in

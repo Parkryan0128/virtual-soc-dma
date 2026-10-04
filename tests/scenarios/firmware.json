@@ -1,0 +1,88 @@
+[
+  {
+    "name": "boot",
+    "stage": "boot",
+    "machine": "virt,aia=none",
+    "expected": [
+      "PASS timer\nPASS boot\n"
+    ],
+    "demo": true
+  },
+  {
+    "name": "detect",
+    "stage": "detect",
+    "expected": [
+      "PASS DMA detection\n"
+    ],
+    "demo": true
+  },
+  {
+    "name": "polling",
+    "stage": "polling",
+    "expected": [
+      "PASS polling suite\n"
+    ],
+    "trace": true
+  },
+  {
+    "name": "interrupt",
+    "stage": "irq",
+    "expected": [
+      "PASS interrupt suite\n"
+    ],
+    "trace": true,
+    "demo": true
+  },
+  {
+    "name": "lifecycle",
+    "stage": "irq",
+    "expected": [
+      "PASS firmware abort and reuse\n",
+      "PASS firmware reset and reuse\n",
+      "PASS firmware enable pending interrupt\n",
+      "PASS lifecycle suite\n"
+    ],
+    "trace": true,
+    "demo": true
+  },
+  {
+    "name": "cancel_race",
+    "stage": "irq",
+    "options": [
+      "-global",
+      "virtual-dma.delay-ns=342"
+    ],
+    "expected": [
+      "PASS cancellation race suite\n"
+    ],
+    "trace": true
+  },
+  {
+    "name": "stall",
+    "stage": "all",
+    "options": [
+      "-global",
+      "virtual-dma.stall-next=on"
+    ],
+    "expected": [
+      "PASS stall timeout\n",
+      "PASS stall recovery\n"
+    ],
+    "trace": true,
+    "demo": true
+  },
+  {
+    "name": "dropirq",
+    "stage": "all",
+    "options": [
+      "-global",
+      "virtual-dma.drop-irq-next=on"
+    ],
+    "expected": [
+      "PASS dropirq timeout\n",
+      "PASS dropirq recovery\n"
+    ],
+    "trace": true,
+    "demo": true
+  }
+]
