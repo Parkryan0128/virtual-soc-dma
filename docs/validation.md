@@ -62,4 +62,6 @@ A Linux arm64 QEMU build with `--extra-cflags=--coverage --extra-ldflags=--cover
 
 GCC `-fanalyzer` completed without diagnostics for `model/virtual_dma.c`, `firmware/drivers/dma.c`, and `firmware/drivers/platform_io.c`. The model and firmware source are unchanged from the preceding successful ASan/UBSan audit. Current changes concern build publication and test evidence handling.
 
-Final source-only rebuild and hosted CI are being checked before recording their source revision and results. Local raw evidence is retained under `artifacts/rescan-*` and `artifacts/coverage/`.
+Source revision `fd0966257b461b3a1079dccbab6e87861e1373cc` passed the source-only Linux arm64 rebuild: **13/13 groups** (26 host tests, platform, 15 native QTests and 10 firmware scenarios) and **6/6 demo scenarios**. Every summary artifact path was checked against the copied logs. Hosted Linux x86-64 CI passed the same source-only rebuild, full suite and demo. [Successful second-scan CI run](https://github.com/Parkryan0128/virtual-soc-dma/actions/runs/37185865031). Local raw evidence is retained under `artifacts/rescan-*` and `artifacts/coverage/`.
+
+The final documentation-only commit records the observed second-scan results; executable source remains identical to `fd0966257b461b3a1079dccbab6e87861e1373cc`.
