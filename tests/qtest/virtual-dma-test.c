@@ -149,14 +149,24 @@ static void test_commands(void)
     uint32_t a = VSOC_RAM_BASE + 0x10000, b = VSOC_RAM_BASE + 0x20000;
     qtest_writel(q, a, 0x11111111); qtest_writel(q, b, 0);
     submit(q, a, b, 4);
+    /* A repeated START halfway through must not postpone completion. */
+    qtest_clock_step(q, 500000);
     put(q, DMA_SRC, 0); put(q, DMA_DST, 0); put(q, DMA_LEN, 0);
     put(q, DMA_COMMAND, DMA_START); put(q, DMA_COMMAND, DMA_ACK);
     put(q, DMA_COMMAND, DMA_RESET | DMA_ABORT);
     g_assert_cmpuint(reg(q, DMA_STATUS), ==, DMA_BUSY);
     g_assert_cmphex(reg(q, DMA_SRC), ==, a);
+    g_assert_cmphex(reg(q, DMA_DST), ==, b);
+    g_assert_cmpuint(reg(q, DMA_LEN), ==, 4);
     /* The source is read at completion, rather than frozen at START. */
     qtest_writel(q, a, 0x22222222);
-    qtest_clock_step(q, 1000000);
+    qtest_clock_step(q, 499999);
+    g_assert_cmpuint(reg(q, DMA_STATUS), ==, DMA_BUSY);
+    g_assert_cmpuint(reg(q, DMA_IRQ_PENDING), ==, 0);
+    g_assert_cmphex(qtest_readl(q, b), ==, 0);
+    qtest_clock_step(q, 1);
+    g_assert_cmpuint(reg(q, DMA_STATUS), ==, DMA_DONE);
+    g_assert_cmpuint(reg(q, DMA_IRQ_PENDING), ==, 1);
     g_assert_cmphex(qtest_readl(q, b), ==, 0x22222222);
     put(q, DMA_COMMAND, DMA_START);
     g_assert_cmpuint(reg(q, DMA_STATUS), ==, DMA_DONE);

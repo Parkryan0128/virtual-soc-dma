@@ -41,3 +41,11 @@ The second scan found additional issues in incremental build and evidence handli
 A demo or partial run could overwrite full-suite UART/model evidence, while setup failure or interruption could leave an earlier passing summary. Each run mode now owns its own evidence directory; summaries start in an incomplete state and are atomically replaced with final results. Reserved manifest names cannot collide with host-test/evidence directories. Real subprocess tests verify isolation and failed/interrupted-run summary behavior.
 
 The expanded host suite has 26 tests. The full coverage-instrumented suite and GCC static analysis passed; model coverage gaps were inspected explicitly. See [validation.md](validation.md) for exact measurements and final clean-build/CI status.
+
+## Third scan finding (2026-10-04)
+
+The third scan found a test gap, not a new device/driver defect. Existing native tests wrote a repeated START without advancing the virtual clock first. A deliberately broken model that accepted START while BUSY therefore passed all 15 native groups: restarting the timer at the same clock value left the deadline unchanged.
+
+The `commands` test now advances halfway through a transfer before attempting configuration writes and repeated START. It checks that SRC/DST/LEN remain unchanged, memory and pending status remain untouched 1 ns before the original deadline, and the copy completes at that original deadline. The broken model now fails with BUSY where DONE is required; the unchanged production model passes.
+
+Five isolated model mutations were checked: accepting overlap, restarting while BUSY, omitting ABORT timer cancellation, ignoring IRQ_ENABLE, and retaining pending IRQ on ACK. All five are detected after strengthening the test. These selected fault checks validate specific assertions; they are not an exhaustive mutation score. No production model or firmware change was needed.

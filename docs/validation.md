@@ -65,3 +65,13 @@ GCC `-fanalyzer` completed without diagnostics for `model/virtual_dma.c`, `firmw
 Source revision `fd0966257b461b3a1079dccbab6e87861e1373cc` passed the source-only Linux arm64 rebuild: **13/13 groups** (26 host tests, platform, 15 native QTests and 10 firmware scenarios) and **6/6 demo scenarios**. Every summary artifact path was checked against the copied logs. Hosted Linux x86-64 CI passed the same source-only rebuild, full suite and demo. [Successful second-scan CI run](https://github.com/Parkryan0128/virtual-soc-dma/actions/runs/37185865031). Local raw evidence is retained under `artifacts/rescan-*` and `artifacts/coverage/`.
 
 The final documentation-only commit records the observed second-scan results; executable source remains identical to `fd0966257b461b3a1079dccbab6e87861e1373cc`.
+
+## Third full scan (2026-10-04)
+
+Starting from `8dcba2cc3fac0993877e0df0e3706189b4a9c0bc`, another source-only fresh Linux arm64 container build passed **13/13 groups** and **6/6 demo scenarios**. Review covered the device contract, model, driver, startup/traps, build/fetch scripts, runner and evidence handling. A mutation check then exposed the repeated-START timing gap described in [audit.md](audit.md): accepting START while BUSY passed all 15 previous native groups.
+
+After strengthening `commands`, that mutation fails at the original completion deadline with `STATUS=BUSY` instead of `DONE`. Four other selected mutations also fail their targeted checks: accepting overlap (`errors`), leaving the ABORT timer armed (`deadline_cancel`, model invariant failure), ignoring IRQ_ENABLE (`irq`), and retaining pending IRQ on ACK (`irq`). Mutations were applied only to the disposable dependency-source copy. The original model was restored and rebuilt before validation resumed.
+
+The final local suite passed **13/13 groups** (26 host tests, platform validation, 15 native QTests and 10 firmware scenarios), followed by **6/6 demo scenarios**. Only native test assertions and audit documentation changed; production model and firmware remain unchanged. No new production defect was found within the documented contract. This pass did not rerun sanitizers or remeasure coverage; those observations above apply to the unchanged model/firmware.
+
+Local evidence is retained in `artifacts/thirdscan/`, including before/after mutation summaries and final per-scenario logs; `artifacts/thirdscan-clean.log` and `artifacts/thirdscan-final.log` record the clean build and final runs. The five selected mutations are a focused negative check, not an exhaustive correctness guarantee.
