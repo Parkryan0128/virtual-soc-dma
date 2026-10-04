@@ -32,13 +32,9 @@ The full device suite contains **15 native QTest cases**, with parameterized tra
 
 The expanded audit adds 64 state/command combinations, exact deadline cancellation, system reset, RAM adjacency and end boundaries, delay bounds, combined one-shot faults, and guest timer-wrap/API edges. See [audit.md](audit.md) for fixes and regression evidence.
 
-## Previous clean-build and CI baseline
+## Previous baseline
 
-A source-only fresh-container run of source commit `c811f1c1240960d53f9a6d48d05386bc2834a6fa` completed successfully with exit status 0 on Linux arm64. Its source archive excluded `build/`, `artifacts/`, and `.git`: pinned QEMU and all eight firmware images were built again from source. The full suite passed **11/11 groups** (runner, platform, QTest, and eight guest scenarios); the short demo passed **6/6 groups**. The cancellation race exercised 26 successful aborts and 102 preserved completions.
-
-Hosted Linux x86-64 validation completed successfully for this exact source commit. It independently built the development image and source-only fresh container, then passed the full suite and short demo. [Successful final CI run](https://github.com/Parkryan0128/virtual-soc-dma/actions/runs/37174177012).
-
-The final documentation commit only records these observed results and lifecycle semantics; executable source matches the tested commit.
+The earlier implementation (`c811f1c1240960d53f9a6d48d05386bc2834a6fa`) passed its 11-group suite and six-scenario demo in clean arm64 and hosted x86-64 environments. [Earlier CI run](https://github.com/Parkryan0128/virtual-soc-dma/actions/runs/37174177012). The expanded audit results below supersede that coverage.
 
 ## Evidence locations
 
@@ -48,4 +44,12 @@ Run `./scripts/test-in-container.sh`. The wrapper copies the fresh environment's
 
 ## Expanded audit verification
 
-The expanded suite passes incrementally. Final source-only and sanitizer builds and hosted CI are being verified before recording their results.
+Source commit `5aae7887e28a267c484ab84129416f33387827a4` passed a source-only fresh Linux arm64 container build and independently passed hosted Linux x86-64 CI: **13/13 groups** (19 host tests, platform validation, 15 QTests, and 10 firmware scenarios), plus **6/6 demo scenarios**. [Successful audit CI run](https://github.com/Parkryan0128/virtual-soc-dma/actions/runs/37184020506).
+
+Negative regression checks reproduced the previous idle-polling and runner failures. Temporarily removing polling timeout RESET from a separate driver copy caused `FAIL polling timeout resets stalled device` and guest exit 1; the production source passed.
+
+An additional Linux arm64 build of the pinned QEMU with `--enable-asan --enable-ubsan` passed **13/13 groups** using `UBSAN_OPTIONS=halt_on_error=1`. All 15 native device tests and all 10 actual RV32 firmware scenarios passed; retained logs contained no AddressSanitizer, LeakSanitizer, or undefined-behavior error diagnostics. QEMU printed ASan's warning about limited `makecontext`/`swapcontext` support; this run does not imply sanitizer coverage of every coroutine operation.
+
+Instrumented TCG exceeded the normal 30-second watchdog on large-copy firmware. The dedicated sanitizer run used a bounded 180-second host watchdog per group and otherwise kept the same scenario commands and virtual-time settings. Normal local/CI validation retains its 30-second guest watchdog. Local sanitized logs and summary are retained in `artifacts/sanitizer/`; the normal evidence remains in `artifacts/`.
+
+The follow-up documentation commit records these observations only; executable source is unchanged from the CI-tested commit.

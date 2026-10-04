@@ -2,7 +2,7 @@
 
 A software-only virtual platform for developing and testing a DMA driver before hardware exists.
 
-**Status: all planned milestones complete; expanded edge-case audit verification is in progress. See [validation evidence](docs/validation.md) for the tested environment and CI status.**
+**Status: all planned milestones and the edge-case audit are complete. Fresh-container tests, hosted CI, and the ASan/UBSan suite pass. See [validation evidence](docs/validation.md) for the tested environment and CI status.**
 
 ## What this project does
 

@@ -7,7 +7,7 @@ The original suite covered normal copies, invalid descriptors, interrupts, cance
 | Finding | Change | Regression |
 | --- | --- | --- |
 | Polling an idle device returned success with STATUS=0 | Return NO_REQUEST without changing outputs | `poll_edges`: failed on the previous driver, passes with the fix |
-| Polling timeout left the device BUSY and diagnostics unset | Snapshot state, reset/cancel the transfer, then return TIMEOUT | Stalled polling request, unchanged destination, fresh successful copy |
+| Polling timeout left the device BUSY and diagnostics unset | Snapshot state, reset/cancel the transfer, then return TIMEOUT | Stalled polling request, unchanged destination, fresh successful copy; removing timeout RESET makes this test fail |
 | Null wait output could fault or corrupt guest memory | Reject missing outputs without consuming the request | Both polling output pointers and IRQ result pointer |
 | Timeout reads could mix BUSY with a later completion's pending flag | Shared state snapshot rechecks STATUS | State-transition review; complete timeout diagnostics in guest tests |
 | Substring matching accepted `NOT PASS ...` or output containing both FAIL and PASS | Require complete marker lines and reject explicit FAIL | New host regression cases failed before the fix |
@@ -30,6 +30,6 @@ The original suite covered normal copies, invalid descriptors, interrupts, cance
 
 ## Validation record
 
-Normal incremental execution passed the expanded suite and demo. Final clean-container, sanitizer and hosted-CI results are recorded in [validation.md](validation.md) after they are observed.
+The expanded suite passed normal incremental execution, a source-only fresh Linux arm64 container, hosted Linux x86-64 CI, and an ASan/UBSan Linux arm64 build. The six-scenario demo also passed in the clean build and CI. Exact source revision, run links, sanitizer settings and limits are recorded in [validation.md](validation.md).
 
 The audit does not claim exhaustive state-space exploration or real-chip timing coverage. The model intentionally has a single hart/channel, atomic completion, no cache/coherency/IOMMU, and no RTL. The tested boundaries above match that contract.
