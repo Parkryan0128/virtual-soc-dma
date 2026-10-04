@@ -26,10 +26,18 @@ The original suite covered normal copies, invalid descriptors, interrupts, cance
 - Timing/lifecycle: completion visibility, cancellation 1 ns before and at completion, sequential reuse, QEMU system reset from BUSY/DONE/ERROR, minimum/maximum valid delay and rejection outside those bounds.
 - Faults: stall and lost IRQ individually and together; a cancelled stalled transfer does not consume the next-terminal-event lost-IRQ fault; recovery has no stale writes or interrupts.
 - Real RV32 firmware: 10 scenarios. Added empty/repeated wait, null outputs, timeout cleanup, timer wrap, reset with an unclaimed PLIC completion while CPU interrupts are masked, reset after ISR delivery but before result consumption, repeated reset/init and subsequent reuse.
-- Host: 19 tests covering runner/process failures, manifest selection and dependency-fetch recovery. The six-scenario reviewer demo remains concise.
+- Host: 26 tests covering runner/process failures, manifest selection and dependency-fetch recovery. The six-scenario reviewer demo remains concise.
 
 ## Validation record
 
 The expanded suite passed normal incremental execution, a source-only fresh Linux arm64 container, hosted Linux x86-64 CI, and an ASan/UBSan Linux arm64 build. The six-scenario demo also passed in the clean build and CI. Exact source revision, run links, sanitizer settings and limits are recorded in [validation.md](validation.md).
 
 The audit does not claim exhaustive state-space exploration or real-chip timing coverage. The model intentionally has a single hart/channel, atomic completion, no cache/coherency/IOMMU, and no RTL. The tested boundaries above match that contract.
+
+## Second scan findings (2026-10-04)
+
+The second scan found additional issues in incremental build and evidence handling. A failed firmware compilation could leave old or partly updated ELFs runnable, and removing a scenario did not remove its old ELF. The builder now invalidates the old set and publishes a complete staged set only after all compiles succeed. Regression tests exercise partial compiler failure, invalid manifest and successful replacement of obsolete images.
+
+A demo or partial run could overwrite full-suite UART/model evidence, while setup failure or interruption could leave an earlier passing summary. Each run mode now owns its own evidence directory; summaries start in an incomplete state and are atomically replaced with final results. Reserved manifest names cannot collide with host-test/evidence directories. Real subprocess tests verify isolation and failed/interrupted-run summary behavior.
+
+The expanded host suite has 26 tests. The full coverage-instrumented suite and GCC static analysis passed; model coverage gaps were inspected explicitly. See [validation.md](validation.md) for exact measurements and final clean-build/CI status.

@@ -42,12 +42,12 @@ def stop_process_group(process):
         pass
 
 
-def run(name, command, expected=(), timeout=30, quiet=False, evidence=None):
-    artifact = ROOT / 'artifacts' / name
+def run(name, command, expected=(), timeout=30, quiet=False, evidence=None, artifact_root=None):
+    artifact = (artifact_root or ROOT / 'artifacts') / name
     if artifact.exists():
         shutil.rmtree(artifact)
     artifact.mkdir(parents=True, exist_ok=True)
-    record = {'name': name, 'command': command, 'passed': False}
+    record = {'name': name, 'command': command, 'artifact_dir': str(artifact), 'passed': False}
     stdout, stderr = b'', b''
     try:
         env = dict(os.environ, QTEST_QEMU_BINARY=str(ROOT / 'build/qemu/qemu-system-riscv32'))
@@ -97,8 +97,9 @@ def run(name, command, expected=(), timeout=30, quiet=False, evidence=None):
     return record
 
 
-def guest(scenario, demo=False):
+def guest(scenario, demo=False, artifact_root=None):
     name = scenario['name']
+    artifact_root = artifact_root or ROOT / 'artifacts'
     binary = str(ROOT / 'build/qemu/qemu-system-riscv32')
     command = [binary, '-M', scenario.get('machine', 'virt,dma=on,aia=none'),
                '-cpu', 'rv32', '-smp', '1', '-m', '128M', '-bios', 'none',
@@ -106,9 +107,16 @@ def guest(scenario, demo=False):
                '-kernel', str(ROOT / f'build/firmware/{name}.elf')]
     command.extend(scenario.get('options', []))
     if scenario.get('trace'):
-        (ROOT / 'artifacts' / name).mkdir(parents=True, exist_ok=True)
-        command += ['-trace', f'enable=virtual_dma_*,file={ROOT}/artifacts/{name}/model.trace']
-    return run(name, command, scenario['expected'], quiet=demo)
+        (artifact_root / name).mkdir(parents=True, exist_ok=True)
+        command += ['-trace', f'enable=virtual_dma_*,file={artifact_root / name}/model.trace']
+    return run(name, command, scenario['expected'], quiet=demo, artifact_root=artifact_root)
+
+
+def write_summary(path, records):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(records, indent=2) + '\n')
+    temporary.replace(path)
 
 
 def main():
@@ -119,35 +127,49 @@ def main():
     selection.add_argument('--demo', action='store_true', help='short firmware demonstration')
     args = parser.parse_args()
     stage = args.stage or 'all'
+    artifact_root = ROOT / 'artifacts'
+    filename = 'summary.json'
+    if args.scenario:
+        if not re.fullmatch(r'[a-z][a-z0-9_]*', args.scenario):
+            parser.error('invalid scenario name')
+        artifact_root /= 'scenarios'
+        filename = args.scenario + '-summary.json'
+    elif args.demo:
+        artifact_root /= 'demo'
+    elif stage != 'all':
+        artifact_root = artifact_root / 'stages' / stage
+    summary = artifact_root / filename
+    # A crash, invalid manifest or interrupted run must not expose old success.
+    write_summary(summary, [dict(name='run', passed=False, reason='run incomplete')])
     records = []
     try:
         scenarios = select_scenarios(load_scenarios(SCENARIOS), stage, args.scenario, args.demo)
     except (OSError, ValueError) as exc:
+        write_summary(summary, [dict(name='setup', passed=False, reason=str(exc))])
         parser.error(str(exc))
     if not args.scenario and not args.demo:
         if stage == 'all':
-            records.append(run('runner', [sys.executable, '-m', 'unittest', 'discover', '-s', str(ROOT / 'tests'), '-p', 'test_*.py', '-v'], evidence='unittest'))
+            records.append(run('runner', [sys.executable, '-m', 'unittest', 'discover', '-s', str(ROOT / 'tests'), '-p', 'test_*.py', '-v'], evidence='unittest', artifact_root=artifact_root))
         if stage != 'boot':
-            records.append(run('platform', [sys.executable, str(ROOT / 'scripts/check-platform.py')],
-                               expected=['PASS platform DTB and configuration constraints']))
+            records.append(run('platform', [sys.executable, str(ROOT / 'scripts/check-platform.py'),
+                                           '--artifacts-dir', str(artifact_root / 'platform')],
+                               expected=['PASS platform DTB and configuration constraints'], artifact_root=artifact_root))
             command = [str(ROOT / 'build/qemu/tests/qtest/virtual-dma-test')]
             expected = []
             if stage == 'detect':
                 command += ['-p', '/riscv32/virtual-dma/registers']
                 expected = ['ok 1 /riscv32/virtual-dma/registers']
-            records.append(run('qtest', command, expected, timeout=120, evidence='tap'))
+            records.append(run('qtest', command, expected, timeout=120, evidence='tap', artifact_root=artifact_root))
     if args.demo:
         print('Virtual SoC firmware demonstration')
     for scenario in scenarios:
-        result = guest(scenario, demo=args.demo)
+        result = guest(scenario, demo=args.demo, artifact_root=artifact_root)
         records.append(result)
         if args.demo and result['passed']:
-            print((ROOT / 'artifacts' / scenario['name'] / 'stdout.log').read_text(), end='')
+            print((artifact_root / scenario['name'] / 'stdout.log').read_text(), end='')
     passed = all(record['passed'] for record in records)
     kind = 'demo' if args.demo else args.scenario or stage
-    filename = f'{kind}-summary.json' if args.demo or args.scenario else 'summary.json'
-    (ROOT / 'artifacts').mkdir(exist_ok=True)
-    (ROOT / 'artifacts' / filename).write_text(json.dumps(records, indent=2) + '\n')
+    write_summary(summary, records)
     print(f'{"PASS" if passed else "FAIL"} {kind}: '
           f'{sum(record["passed"] for record in records)}/{len(records)} groups')
     return 0 if passed else 1

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Verify the generated DMA device tree and reject unsupported boards."""
 from pathlib import Path
+import argparse
 import struct
 import subprocess
 
@@ -42,7 +43,9 @@ def nodes(data):
 
 
 def main():
-    artifacts = ROOT/'artifacts/platform'
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--artifacts-dir', type=Path, default=ROOT / 'artifacts/platform')
+    artifacts = parser.parse_args().artifacts_dir
     artifacts.mkdir(parents=True, exist_ok=True)
     for enabled in [False, True]:
         out = artifacts/('dma.dtb' if enabled else 'stock.dtb')

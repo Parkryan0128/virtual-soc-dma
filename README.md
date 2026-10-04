@@ -2,7 +2,7 @@
 
 A software-only virtual platform for developing and testing a DMA driver before hardware exists.
 
-**Status: all planned milestones and the edge-case audit are complete. Fresh-container tests, hosted CI, and the ASan/UBSan suite pass. See [validation evidence](docs/validation.md) for the tested environment and CI status.**
+**Status: all planned milestones and the first edge-case audit are complete. A second full scan passed coverage and static analysis; final clean-build/CI validation of evidence-handling fixes is in progress. See [validation evidence](docs/validation.md) for the tested environment and CI status.**
 
 ## What this project does
 
@@ -22,7 +22,7 @@ Example: firmware requests a 1 KiB copy, continues a small CPU task while the de
 | Failure controls | Host-side options for stalled completion and dropped IRQ |
 | Deliverable | Reproducible build, automated suite, text demo, traces, and documented contract |
 
-The DMA model and QEMU integration will use **C**, following QEMU's native device interfaces. Firmware uses C with minimal RISC-V assembly. Python orchestrates builds/tests and validates logs.
+The DMA model and QEMU integration use **C**, following QEMU's native device interfaces. Firmware uses C with minimal RISC-V assembly. Python orchestrates builds/tests and validates logs.
 
 ## Architecture
 
@@ -102,6 +102,8 @@ make demo
 
 `make test` runs the clean full suite and demo. Inside an already built Linux environment, `./scripts/run-demo.sh` only runs the six demonstration firmware scenarios, without verbose native QTest output.
 
+Firmware builds publish a complete set of ELF files only after every scenario compiles. A failed build invalidates the previous images so tests cannot accidentally execute stale firmware.
+
 For incremental work, these commands reuse `build/`. `--stage boot`, `--stage detect`, `--stage polling`, and `--stage irq` restrict the firmware scenarios. Run the default full suite before publishing changes.
 
 Host-only device options:
@@ -117,7 +119,9 @@ The model is instantiated by the patched board, not a standalone `-device` comma
 
 ## Debugging
 
-Each firmware scenario writes UART output to `artifacts/<scenario>/stdout.log`, QEMU diagnostics to `stderr.log`, and DMA events to `model.trace`. Device tests have their own `qtest/` logs. The platform test checks the generated DTB against the address/interrupt contract. A host watchdog treats hangs as failures.
+A full run writes UART output to `artifacts/<scenario>/stdout.log`, QEMU diagnostics to `stderr.log`, and DMA events to `model.trace`. Device tests have their own `qtest/` logs. Each summary records its exact artifact directory and command.
+
+Other runs have isolated evidence: demo logs and `summary.json` live under `artifacts/demo/`; stage runs under `artifacts/stages/<stage>/`; a single scenario under `artifacts/scenarios/<scenario>/` with its `<scenario>-summary.json` alongside. They preserve full-suite logs and `artifacts/summary.json`. Starting a run marks its summary incomplete before validation, so an invalid configuration or interruption cannot leave a previous PASS as the current result. The platform test checks the generated DTB against the address/interrupt contract. A host watchdog treats hangs as failures.
 
 To inspect firmware in a debugger, add `-S -gdb tcp::1234` to the scenario command recorded in `artifacts/summary.json`, then connect a RISC-V-capable GDB and load its ELF symbols. Omit the test runner watchdog for an interactive debugging session.
 

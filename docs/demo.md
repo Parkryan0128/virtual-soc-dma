@@ -58,4 +58,4 @@ In the stall run the destination stays untouched until the driver's deadline exp
 
 The interrupt test includes a small CPU task while DMA is BUSY. This demonstrates nonblocking operation only: the model's configurable completion delay is not a real hardware latency measurement.
 
-Inspect `artifacts/interrupt/model.trace`, `artifacts/stall/model.trace`, and `artifacts/dropirq/model.trace` to follow START, completion scheduling, IRQ transitions, faults, and resets alongside the UART logs.
+Inspect `artifacts/demo/interrupt/model.trace`, `artifacts/demo/stall/model.trace`, and `artifacts/demo/dropirq/model.trace` to follow START, completion scheduling, IRQ transitions, faults, and resets alongside the UART logs.

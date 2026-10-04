@@ -9,7 +9,7 @@ case "${1:-test}" in
 esac
 mkdir -p build/buildx artifacts
 # A failed build must not leave a prior run's passing summary as current evidence.
-rm -f artifacts/summary.json artifacts/demo-summary.json artifacts/build.log
+rm -f artifacts/summary.json artifacts/demo/summary.json artifacts/demo-summary.json artifacts/build.log
 image=virtual-soc-dma-dev:local
 BUILDX_CONFIG="$PWD/build/buildx" docker build -t "$image" .
 container="virtual-soc-dma-test-$$"

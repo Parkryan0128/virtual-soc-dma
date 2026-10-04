@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 
 STAGES = ['boot', 'detect', 'polling', 'irq', 'all']
+RESERVED_NAMES = {'runner', 'platform', 'qtest', 'demo', 'stages', 'scenarios'}
 MANIFEST = Path(__file__).resolve().parents[1] / 'tests/scenarios/firmware.json'
 
 
@@ -16,7 +17,7 @@ def load_scenarios(path=MANIFEST):
         if not isinstance(scenario, dict):
             raise ValueError('scenario must be an object')
         name = scenario.get('name', '')
-        if not isinstance(name, str) or not re.fullmatch(r'[a-z][a-z0-9_]*', name) or name in names:
+        if not isinstance(name, str) or not re.fullmatch(r'[a-z][a-z0-9_]*', name) or name in names or name in RESERVED_NAMES:
             raise ValueError('invalid or duplicate scenario name')
         names.add(name)
         if scenario.get('stage') not in STAGES:

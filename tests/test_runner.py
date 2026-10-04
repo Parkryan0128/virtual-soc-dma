@@ -2,11 +2,13 @@
 import contextlib
 import importlib.util
 import io
+import json
 from pathlib import Path
 import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location('runner', Path(__file__).parents[1] / 'scripts/run-tests.py')
 runner = importlib.util.module_from_spec(spec)
@@ -74,6 +76,65 @@ class EvidenceTests(unittest.TestCase):
 
     def test_complete_tap_plan_passes(self):
         self.assertIsNone(runner.tap_failure('1..2\nok 1 /a\nok 2 /b\n'))
+
+    def invoke_main(self, *args):
+        with mock.patch.object(sys, 'argv', ['run-tests.py', *args]), \
+             contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return runner.main()
+
+    def test_bad_manifest_cannot_leave_passing_summary(self):
+        summary = runner.ROOT / 'artifacts/summary.json'
+        summary.parent.mkdir()
+        summary.write_text('[{"name":"old", "passed":true}]')
+        with mock.patch.object(runner, 'load_scenarios', side_effect=ValueError('bad manifest')):
+            with self.assertRaises(SystemExit):
+                self.invoke_main()
+        self.assertTrue(summary.exists())
+        self.assertFalse(all(r['passed'] for r in json.loads(summary.read_text())))
+
+    def test_interrupted_run_cannot_leave_passing_summary(self):
+        summary = runner.ROOT / 'artifacts/summary.json'
+        summary.parent.mkdir()
+        summary.write_text('[{"name":"old", "passed":true}]')
+        scenarios = [dict(name='boot', stage='boot', expected=['PASS boot'])]
+        with mock.patch.object(runner, 'load_scenarios', return_value=scenarios), \
+             mock.patch.object(runner, 'run', side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.invoke_main()
+        self.assertEqual(json.loads(summary.read_text())[0]['reason'], 'run incomplete')
+
+    def test_demo_cannot_replace_full_suite_logs(self):
+        artifact = runner.ROOT / 'artifacts/boot'
+        artifact.mkdir(parents=True)
+        (artifact / 'stdout.log').write_text('original full run')
+        binary = runner.ROOT / 'build/qemu/qemu-system-riscv32'
+        binary.parent.mkdir(parents=True)
+        binary.write_text('#!' + sys.executable + '\nprint("PASS demo fixture")\n')
+        binary.chmod(0o755)
+        scenarios = [dict(name='boot', stage='boot', demo=True, expected=['PASS demo fixture'])]
+        with mock.patch.object(runner, 'load_scenarios', return_value=scenarios):
+            self.assertEqual(self.invoke_main('--demo'), 0)
+        self.assertEqual((artifact / 'stdout.log').read_text(), 'original full run')
+        self.assertIn('PASS demo fixture', (runner.ROOT / 'artifacts/demo/boot/stdout.log').read_text())
+
+    def test_partial_runs_preserve_full_suite_evidence(self):
+        artifact = runner.ROOT / 'artifacts/boot'
+        artifact.mkdir(parents=True)
+        (artifact / 'stdout.log').write_text('original full run')
+        summary = runner.ROOT / 'artifacts/summary.json'
+        summary.write_text('original full summary')
+        binary = runner.ROOT / 'build/qemu/qemu-system-riscv32'
+        binary.parent.mkdir(parents=True)
+        binary.write_text('#!' + sys.executable + '\nprint("PASS fixture")\n')
+        binary.chmod(0o755)
+        scenarios = [dict(name='boot', stage='boot', expected=['PASS fixture'])]
+        with mock.patch.object(runner, 'load_scenarios', return_value=scenarios):
+            self.assertEqual(self.invoke_main('--stage', 'boot'), 0)
+            self.assertEqual(self.invoke_main('--scenario', 'boot'), 0)
+        self.assertEqual((artifact / 'stdout.log').read_text(), 'original full run')
+        self.assertEqual(summary.read_text(), 'original full summary')
+        for path in ('stages/boot/summary.json', 'scenarios/boot-summary.json'):
+            self.assertTrue(all(r['passed'] for r in json.loads((runner.ROOT / 'artifacts' / path).read_text())))
 
     def test_incomplete_or_failed_tap_is_rejected(self):
         for output in ('1..0\n', '1..2\nok 1 /a\n', '1..2\nok 1 /a\nok 1 /b\n',

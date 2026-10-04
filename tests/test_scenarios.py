@@ -31,7 +31,7 @@ class ManifestTests(unittest.TestCase):
 
     def test_invalid_fields_and_duplicate_names_fail(self):
         valid = dict(name='boot', stage='boot', expected=['PASS boot'])
-        for field, bad in [('name', '../boot'), ('stage', 'oops'), ('expected', []),
+        for field, bad in [('name', '../boot'), ('name', 'qtest'), ('name', 'demo'), ('stage', 'oops'), ('expected', []),
                            ('expected', ['']), ('options', '-bad'), ('trace', 'false'),
                            ('source', '../../boot.c'), ('defines', ['-bad']), ('machine', 2)]:
             value = copy.deepcopy(valid)

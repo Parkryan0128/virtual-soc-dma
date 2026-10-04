@@ -28,7 +28,7 @@ Firmware targets `rv32im_zicsr` / `ilp32`, with no libc or OS. Model and native 
 7. Cancellation/completion race: 128 actual guest transfers with a 342 ns model delay produced both abort and completion outcomes. Successful aborts left memory untouched; completed requests retained their ISR result. Guard bytes and exact interrupt counts passed. Temporarily removing the post-ABORT state check made this regression fail (`FAIL cancel owns no result`); restoring the fix passed.
 8. Platform checks: DMA DTB address/size/IRQ/PLIC parent, absence when disabled, and rejection of multicore/wrong RAM/AIA configurations passed.
 
-The full device suite contains **15 native QTest cases**, with parameterized transfer sizes and invalid-request cases inside them. The guest suite now boots **10 firmware images**: boot, detect, polling, interrupt, lifecycle, cancel_race, stall, dropirq, poll_edges, irq_edges. Nineteen host tests cover runner failures and process cleanup, TAP/manifest validation, and interrupted dependency-fetch recovery. The short demo selects six of the firmware scenarios. The separate platform check validates board configuration and DTB content.
+The full device suite contains **15 native QTest cases**, with parameterized transfer sizes and invalid-request cases inside them. The guest suite now boots **10 firmware images**: boot, detect, polling, interrupt, lifecycle, cancel_race, stall, dropirq, poll_edges, irq_edges. Twenty-six host tests cover runner/process failures, TAP/manifest validation, interrupted dependency fetches, failed firmware rebuilds, and isolation of evidence between full/partial/demo runs. The short demo selects six of the firmware scenarios. The separate platform check validates board configuration and DTB content.
 
 The expanded audit adds 64 state/command combinations, exact deadline cancellation, system reset, RAM adjacency and end boundaries, delay bounds, combined one-shot faults, and guest timer-wrap/API edges. See [audit.md](audit.md) for fixes and regression evidence.
 
@@ -53,3 +53,13 @@ An additional Linux arm64 build of the pinned QEMU with `--enable-asan --enable-
 Instrumented TCG exceeded the normal 30-second watchdog on large-copy firmware. The dedicated sanitizer run used a bounded 180-second host watchdog per group and otherwise kept the same scenario commands and virtual-time settings. Normal local/CI validation retains its 30-second guest watchdog. Local sanitized logs and summary are retained in `artifacts/sanitizer/`; the normal evidence remains in `artifacts/`.
 
 The follow-up documentation commit records these observations only; executable source is unchanged from the CI-tested commit.
+
+## Second full scan (2026-10-04)
+
+The model, board patch, assembly startup/traps, driver, firmware scenarios, build scripts, host runner, native tests and documentation were reviewed again. No additional device or driver behavioral defect was found within the current contract. Five newly added regression checks failed before fixes: partial compile failure, invalid build manifest, removed-scenario ELF retention, stale passing run summary, and overwritten full-suite logs. The expanded 26-test host suite passes after fixes, including interruption and partial-run isolation cases.
+
+A Linux arm64 QEMU build with `--extra-cflags=--coverage --extra-ldflags=--coverage` passed the full 13-group suite, six-scenario demo and detect-stage entry point. GCC gcov reported **137/141 executable lines (97.16%)** and **72/77 branch outcomes taken (93.51%)** for `model/virtual_dma.c`. The unexecuted lines are the QOM finalizer: this board-owned, non-hotpluggable device is not explicitly destroyed by the suite. Untaken branches include internal invariant/memory-transaction failures and an unreachable command-switch default. These are model-only coverage figures, not firmware or whole-QEMU coverage, and do not prove exhaustive correctness.
+
+GCC `-fanalyzer` completed without diagnostics for `model/virtual_dma.c`, `firmware/drivers/dma.c`, and `firmware/drivers/platform_io.c`. The model and firmware source are unchanged from the preceding successful ASan/UBSan audit. Current changes concern build publication and test evidence handling.
+
+Final source-only rebuild and hosted CI are being checked before recording their source revision and results. Local raw evidence is retained under `artifacts/rescan-*` and `artifacts/coverage/`.
