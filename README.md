@@ -2,7 +2,7 @@
 
 A software-only virtual platform for developing and testing a DMA driver before hardware exists.
 
-**Status: all planned milestones and both audit passes are complete. The full suite and demo pass in clean Linux arm64 and hosted x86-64 CI. Coverage measurements, static analysis and the preceding ASan/UBSan audit are recorded below. See [validation evidence](docs/validation.md) for the tested environment and CI status.**
+**Status: all planned milestones are complete. The full suite and demo pass in clean Linux arm64 and hosted x86-64 CI. Audit findings, coverage measurements, static analysis and the preceding ASan/UBSan audit are recorded below. See [validation evidence](docs/validation.md) for the tested environment and CI status.**
 
 ## What this project does
 
