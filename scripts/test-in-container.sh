@@ -8,6 +8,8 @@ case "${1:-test}" in
     *) echo 'Usage: test-in-container.sh [test|demo]' >&2; exit 2 ;;
 esac
 mkdir -p build/buildx artifacts
+# A failed build must not leave a prior run's passing summary as current evidence.
+rm -f artifacts/summary.json artifacts/demo-summary.json artifacts/build.log
 image=virtual-soc-dma-dev:local
 BUILDX_CONFIG="$PWD/build/buildx" docker build -t "$image" .
 container="virtual-soc-dma-test-$$"

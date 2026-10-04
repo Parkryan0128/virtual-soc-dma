@@ -4,37 +4,94 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
+import shutil
+import signal
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from firmware_scenarios import STAGES, load_scenarios, select_scenarios
+
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIOS = ROOT / 'tests/scenarios/firmware.json'
-STAGES = ['boot', 'detect', 'polling', 'irq', 'all']
+
+def tap_failure(output):
+    """Require a complete nonempty TAP plan; reject skipped/failed cases."""
+    plans = re.findall(r'^1\.\.(\d+)$', output, re.MULTILINE)
+    cases = re.findall(r'^(not ok|ok) (\d+) (/\S+)(.*)$', output, re.MULTILINE)
+    if len(plans) != 1 or int(plans[0]) == 0:
+        return 'missing or empty TAP plan'
+    count = int(plans[0])
+    if len(cases) != count or [int(c[1]) for c in cases] != list(range(1, count + 1)):
+        return 'incomplete or duplicate TAP results'
+    if len({c[2] for c in cases}) != count:
+        return 'duplicate TAP test name'
+    if any(c[0] != 'ok' or re.search(r'#\s*(SKIP|TODO)', c[3], re.I) for c in cases):
+        return 'failed or skipped TAP test'
+    if re.search(r'^Bail out!', output, re.MULTILINE):
+        return 'TAP bailout'
+    return None
 
 
-def run(name, command, expected=(), timeout=30, quiet=False):
+def stop_process_group(process):
+    # QTest and platform checks spawn QEMU. Killing only their parent leaks it.
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def run(name, command, expected=(), timeout=30, quiet=False, evidence=None):
     artifact = ROOT / 'artifacts' / name
+    if artifact.exists():
+        shutil.rmtree(artifact)
     artifact.mkdir(parents=True, exist_ok=True)
-    record = {'name': name, 'command': command}
+    record = {'name': name, 'command': command, 'passed': False}
+    stdout, stderr = b'', b''
     try:
         env = dict(os.environ, QTEST_QEMU_BINARY=str(ROOT / 'build/qemu/qemu-system-riscv32'))
-        proc = subprocess.run(command, capture_output=True, text=True, timeout=timeout, env=env)
-        (artifact / 'stdout.log').write_text(proc.stdout)
-        (artifact / 'stderr.log').write_text(proc.stderr)
-        record['exit_code'] = proc.returncode
-        record['passed'] = proc.returncode == 0 and all(marker in proc.stdout for marker in expected)
-        if not quiet or not record['passed']:
-            print(proc.stdout, end='')
-        if not record['passed']:
-            record['reason'] = f'exit {proc.returncode} or missing required evidence'
-            print(proc.stderr, file=sys.stderr)
-    except subprocess.TimeoutExpired as exc:
-        record.update(passed=False, reason='host watchdog expired')
-        (artifact / 'stdout.log').write_bytes(exc.stdout or b'')
-        (artifact / 'stderr.log').write_bytes(exc.stderr or b'')
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              start_new_session=True, env=env) as proc:
+            try:
+                stdout, stderr = proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                stop_process_group(proc)
+                stdout, stderr = proc.communicate()
+                record['reason'] = 'host watchdog expired'
+            except BaseException:
+                stop_process_group(proc)
+                proc.communicate()
+                raise
+            record['exit_code'] = proc.returncode
     except OSError as exc:
-        record.update(passed=False, reason=str(exc))
-        (artifact / 'stderr.log').write_text(str(exc) + '\n')
+        record['reason'] = str(exc)
+        stderr = (str(exc) + '\n').encode()
+    (artifact / 'stdout.log').write_bytes(stdout)
+    (artifact / 'stderr.log').write_bytes(stderr)
+    try:
+        output = stdout.decode('utf-8')
+    except UnicodeDecodeError:
+        output = stdout.decode('utf-8', errors='replace')
+        record.setdefault('reason', 'invalid UTF-8 output')
+    if 'reason' not in record:
+        missing = [m for m in expected if '\n' + m.strip('\n') + '\n' not in '\n' + output.rstrip('\n') + '\n']
+        if record['exit_code'] != 0:
+            record['reason'] = f'exit {record["exit_code"]}'
+        elif re.search(r'^FAIL(?:\s|$)', output, re.MULTILINE):
+            record['reason'] = 'explicit failure marker'
+        elif missing:
+            record['reason'] = 'missing required evidence: ' + repr(missing)
+        elif evidence == 'tap' and (failure := tap_failure(output)):
+            record['reason'] = failure
+        elif evidence == 'unittest' and not re.search(rb'Ran [1-9]\d* tests?\b[\s\S]*\nOK\s*$', stderr):
+            record['reason'] = 'missing successful host test results'
+    record['passed'] = 'reason' not in record
+    if not quiet or not record['passed']:
+        print(output, end='')
+    if not record['passed']:
+        print(record['reason'], file=sys.stderr)
+        print(stderr.decode('utf-8', errors='replace'), file=sys.stderr)
     if not quiet:
         print(('PASS ' if record['passed'] else 'FAIL ') + name)
     return record
@@ -61,28 +118,24 @@ def main():
     selection.add_argument('--scenario', help='run one firmware scenario from the manifest')
     selection.add_argument('--demo', action='store_true', help='short firmware demonstration')
     args = parser.parse_args()
-    scenarios = json.loads(SCENARIOS.read_text())
     stage = args.stage or 'all'
     records = []
-    if args.scenario:
-        scenarios = [s for s in scenarios if s['name'] == args.scenario]
-        if not scenarios:
-            parser.error('unknown scenario')
-    elif args.demo:
-        scenarios = [s for s in scenarios if s.get('demo')]
-    else:
-        scenarios = [s for s in scenarios if STAGES.index(s['stage']) <= STAGES.index(stage)]
+    try:
+        scenarios = select_scenarios(load_scenarios(SCENARIOS), stage, args.scenario, args.demo)
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
+    if not args.scenario and not args.demo:
         if stage == 'all':
-            records.append(run('runner', [sys.executable, '-m', 'unittest', 'discover', '-s', str(ROOT / 'tests'), '-p', 'test_runner.py', '-v']))
+            records.append(run('runner', [sys.executable, '-m', 'unittest', 'discover', '-s', str(ROOT / 'tests'), '-p', 'test_*.py', '-v'], evidence='unittest'))
         if stage != 'boot':
             records.append(run('platform', [sys.executable, str(ROOT / 'scripts/check-platform.py')],
-                               expected=['PASS platform DTB']))
+                               expected=['PASS platform DTB and configuration constraints']))
             command = [str(ROOT / 'build/qemu/tests/qtest/virtual-dma-test')]
-            expected = ['1..10', 'ok 10 /riscv32/virtual-dma/dropirq_error']
+            expected = []
             if stage == 'detect':
                 command += ['-p', '/riscv32/virtual-dma/registers']
                 expected = ['ok 1 /riscv32/virtual-dma/registers']
-            records.append(run('qtest', command, expected, timeout=120))
+            records.append(run('qtest', command, expected, timeout=120, evidence='tap'))
     if args.demo:
         print('Virtual SoC firmware demonstration')
     for scenario in scenarios:

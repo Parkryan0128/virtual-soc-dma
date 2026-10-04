@@ -98,3 +98,11 @@ The single-hart M-mode driver provides `dma_irq_submit`, `dma_irq_wait`, `dma_ir
 `dma_irq_cancel` cancels only a BUSY request. It returns -1 for idle or already completed work, preserving a completed request's result for `dma_irq_wait`. If completion wins between reading BUSY and issuing ABORT, the driver checks the post-command state and preserves that completion for wait. A successful cancel removes the outstanding request; waiting on it returns -2. `dma_irq_reset` discards any outstanding result, clears the device and driver request state, drains stale PLIC claims, and re-enables device interrupts. The cumulative IRQ counter is retained for diagnostics.
 
 The lifecycle firmware tests cancellation and reset before completion, old/new destination buffers, no late writes/IRQs, reuse, and completion while device IRQs are disabled followed by enable-after-pending delivery. The cancellation race scenario also sweeps 128 requests around a short completion deadline and verifies both possible outcomes without losing results.
+
+## Wait API results
+
+Polling requests use `dma_submit` followed by `dma_poll`; IRQ requests use `dma_irq_submit` followed by `dma_irq_wait`. These are separate ownership modes and must not be mixed on the same request. All calls are foreground-only on the single hart.
+
+Both wait functions return 0 for a terminal device result (inspect status/error to distinguish DONE from ERROR), -1 for a driver timeout, -2 when no request/result exists, and -3 for a null output pointer. The -2/-3 paths preserve caller outputs and device state. Terminal results are consumed once. Polling timeout records status/error, resets the device and cancels any pending copy; IRQ timeout additionally drains PLIC state and restores device IRQ enable. The timeout snapshot rechecks STATUS to avoid combining BUSY with a later completion's pending bit.
+
+Deadlines use unsigned subtraction of the low 32-bit guest timer. The bounded waits are tested across counter wrap. IRQ deadlines start at submission; polling deadlines start when the caller begins waiting. A terminal polling result observed at the deadline is accepted. IRQ mode requires ISR delivery and still reports a timeout for an intentionally lost IRQ.

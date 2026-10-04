@@ -28,9 +28,11 @@ Firmware targets `rv32im_zicsr` / `ilp32`, with no libc or OS. Model and native 
 7. Cancellation/completion race: 128 actual guest transfers with a 342 ns model delay produced both abort and completion outcomes. Successful aborts left memory untouched; completed requests retained their ISR result. Guard bytes and exact interrupt counts passed. Temporarily removing the post-ABORT state check made this regression fail (`FAIL cancel owns no result`); restoring the fix passed.
 8. Platform checks: DMA DTB address/size/IRQ/PLIC parent, absence when disabled, and rejection of multicore/wrong RAM/AIA configurations passed.
 
-The full device suite contains **10 native QTest cases**, with parameterized transfer sizes and invalid-request cases inside them. The guest suite now boots **8 firmware images**: boot, detect, polling, interrupt, lifecycle, cancel_race, stall, dropirq. Four host-runner tests verify failed exits, missing evidence, missing binaries, and watchdog expiration. The short demo selects six of the firmware scenarios. The separate platform check validates board configuration and DTB content.
+The full device suite contains **15 native QTest cases**, with parameterized transfer sizes and invalid-request cases inside them. The guest suite now boots **10 firmware images**: boot, detect, polling, interrupt, lifecycle, cancel_race, stall, dropirq, poll_edges, irq_edges. Nineteen host tests cover runner failures and process cleanup, TAP/manifest validation, and interrupted dependency-fetch recovery. The short demo selects six of the firmware scenarios. The separate platform check validates board configuration and DTB content.
 
-## Clean-build and CI status
+The expanded audit adds 64 state/command combinations, exact deadline cancellation, system reset, RAM adjacency and end boundaries, delay bounds, combined one-shot faults, and guest timer-wrap/API edges. See [audit.md](audit.md) for fixes and regression evidence.
+
+## Previous clean-build and CI baseline
 
 A source-only fresh-container run of source commit `c811f1c1240960d53f9a6d48d05386bc2834a6fa` completed successfully with exit status 0 on Linux arm64. Its source archive excluded `build/`, `artifacts/`, and `.git`: pinned QEMU and all eight firmware images were built again from source. The full suite passed **11/11 groups** (runner, platform, QTest, and eight guest scenarios); the short demo passed **6/6 groups**. The cancellation race exercised 26 successful aborts and 102 preserved completions.
 
@@ -43,3 +45,7 @@ The final documentation commit only records these observed results and lifecycle
 Run `./scripts/test-in-container.sh`. The wrapper copies the fresh environment's build log, per-scenario logs, DMA traces, DTBs, and structured `summary.json` to local `artifacts/`. CI uploads that directory even when a test fails. Generated logs/binaries stay out of Git; this document records the observed results.
 
 `summary.json` includes the exact executed command, exit code, and pass/fail outcome for each top-level test. Each guest checks memory/results before emitting its final marker; the host requires both that marker and a successful guest exit. Host watchdog expiry is always a failure.
+
+## Expanded audit verification
+
+The expanded suite passes incrementally. Final source-only and sanitizer builds and hosted CI are being verified before recording their results.

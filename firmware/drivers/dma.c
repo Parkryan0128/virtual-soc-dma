@@ -5,6 +5,40 @@ static uint32_t submitted_at;
 static int outstanding;
 extern void trap_entry(void);
 
+/* A timer may complete between MMIO reads even with CPU interrupts masked.
+ * Retry if STATUS changed so timeout diagnostics describe one device state. */
+static DMAResult read_result(void) {
+    DMAResult result;
+    do {
+        result.status = dma_read(DMA_STATUS);
+        result.error = dma_read(DMA_ERROR_CODE);
+        result.pending = dma_read(DMA_IRQ_PENDING);
+    } while (result.status != dma_read(DMA_STATUS));
+    return result;
+}
+
+int dma_poll(uint32_t *status, uint32_t *error) {
+    if (!status || !error) return DMA_WAIT_INVALID;
+    if (dma_read(DMA_STATUS) == 0) return DMA_WAIT_NO_REQUEST;
+    uint32_t start = timer_ticks();
+    while (dma_read(DMA_STATUS) == DMA_BUSY) {
+        if ((uint32_t)(timer_ticks() - start) >= DMA_TIMEOUT_TICKS) {
+            DMAResult result = read_result();
+            /* A result that became visible at the deadline still succeeds. */
+            if (result.status != DMA_BUSY) break;
+            *status = result.status;
+            *error = result.error;
+            dma_write(DMA_COMMAND, DMA_RESET);
+            return DMA_WAIT_TIMEOUT;
+        }
+    }
+    DMAResult result = read_result();
+    *status = result.status;
+    *error = result.error;
+    dma_write(DMA_COMMAND, DMA_ACK);
+    return DMA_WAIT_OK;
+}
+
 static uint32_t interrupt_lock(void) {
     uint32_t previous;
     __asm__ volatile("csrrc %0, mstatus, %1" : "=r"(previous) : "r"(8u) : "memory");
@@ -74,24 +108,23 @@ int dma_irq_submit(uint32_t src, uint32_t dst, uint32_t len) {
 }
 
 int dma_irq_wait(DMAResult *result) {
-    if (!outstanding) return -2;
+    if (!result) return DMA_WAIT_INVALID;
+    if (!outstanding) return DMA_WAIT_NO_REQUEST;
     while (!irq_done) {
         if ((uint32_t)(timer_ticks() - submitted_at) >= DMA_TIMEOUT_TICKS) {
             uint32_t previous = interrupt_lock();
             /* Do not misreport a completion delivered at the deadline. */
             if (irq_done) { interrupt_restore(previous); break; }
-            result->status = dma_read(DMA_STATUS);
-            result->error = dma_read(DMA_ERROR_CODE);
-            result->pending = dma_read(DMA_IRQ_PENDING);
+            *result = read_result();
             reset_locked();
             interrupt_restore(previous);
-            return -1;
+            return DMA_WAIT_TIMEOUT;
         }
     }
     __asm__ volatile("fence iorw, iorw" ::: "memory");
     result->status = irq_status; result->error = irq_error; result->pending = irq_pending;
     outstanding = 0;
-    return 0;
+    return DMA_WAIT_OK;
 }
 
 uint32_t dma_irq_count(void) { return irq_count; }

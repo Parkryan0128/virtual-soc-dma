@@ -6,6 +6,9 @@ mkdir -p build
 if [ ! -d build/qemu-src/.git ]; then
     git init build/qemu-src
     git -C build/qemu-src remote add origin https://github.com/qemu/qemu.git
+fi
+# A failed first fetch leaves .git but no HEAD. Retrying must finish that fetch.
+if ! git -C build/qemu-src rev-parse --verify HEAD >/dev/null 2>&1; then
     git -C build/qemu-src fetch --depth 1 origin "$revision"
     git -C build/qemu-src checkout --detach FETCH_HEAD
 fi

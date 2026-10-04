@@ -17,6 +17,8 @@ This maps the agreed project scope to executable implementation and verification
 | Cancellation/completion race | driver checks the post-ABORT state | `cancel_race.elf`: 128 timed boundary cases, result preservation and exact IRQ count |
 | Stall/lost IRQ and recovery | one-shot host faults, timed driver wait/reset | native fault tests; stall/dropirq firmware and fresh transfer |
 | DTB/platform consistency | generated DMA node and board constraints | `check-platform.py`, DMA-disabled DTB and rejected configurations |
+| Wait API and timer wrap | explicit result codes, coherent snapshot and timeout cleanup | `poll_edges.elf`, `irq_edges.elf`, masked PLIC/reset and repeated wait cases |
+| Complete state/command matrix | device state machine | 64 command cases, deadline cancel, system reset, combined faults |
 | Useful failure evidence | per-scenario logs/traces and JSON summary | runner error/watchdog tests; CI artifact upload |
 | Reviewer demo | manifest-selected firmware scenarios | short demo command run after full suite in CI |
 | Reproducible local/CI use | Docker wrapper, pinned base/compiler/QEMU, Makefile | clean arm64 build and hosted Linux CI |

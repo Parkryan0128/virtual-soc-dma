@@ -69,7 +69,11 @@
       "PASS stall recovery\n"
     ],
     "trace": true,
-    "demo": true
+    "demo": true,
+    "source": "recovery.c",
+    "defines": [
+      "STALL_FAULT=1"
+    ]
   },
   {
     "name": "dropirq",
@@ -83,6 +87,34 @@
       "PASS dropirq recovery\n"
     ],
     "trace": true,
-    "demo": true
+    "demo": true,
+    "source": "recovery.c",
+    "defines": [
+      "STALL_FAULT=0"
+    ]
+  },
+  {
+    "name": "poll_edges",
+    "stage": "polling",
+    "trace": true,
+    "options": [
+      "-global",
+      "virtual-dma.stall-next=on"
+    ],
+    "expected": [
+      "PASS polling API edges and timer wrap\n"
+    ]
+  },
+  {
+    "name": "irq_edges",
+    "stage": "irq",
+    "trace": true,
+    "options": [
+      "-global",
+      "virtual-dma.stall-next=on"
+    ],
+    "expected": [
+      "PASS IRQ API edges, PLIC reset and timer wrap\n"
+    ]
   }
 ]

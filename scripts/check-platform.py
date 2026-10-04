@@ -7,9 +7,14 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 QEMU = str(ROOT/'build/qemu/qemu-system-riscv32')
 
+def require(condition, message):
+    # Unlike Python assert, these validation gates survive PYTHONOPTIMIZE.
+    if not condition:
+        raise AssertionError(message)
+
 def nodes(data):
     magic, _, structure, strings = struct.unpack_from('>4I', data)
-    assert magic == 0xd00dfeed
+    require(magic == 0xd00dfeed, 'invalid FDT magic')
     pos, stack, result = structure, [], {}
     while True:
         token, = struct.unpack_from('>I', data, pos)
@@ -45,19 +50,23 @@ def main():
         subprocess.run([QEMU, '-M', machine, '-cpu', 'rv32', '-smp', '1', '-m', '128M', '-bios', 'none', '-display', 'none'], check=True, capture_output=True, timeout=30)
         tree = nodes(out.read_bytes())
         key = '/soc/dma@10010000'
-        assert (key in tree) == enabled
+        require((key in tree) == enabled, 'DMA presence does not match board option')
         if enabled:
             device = tree[key]
-            assert device['compatible'] == b'vsoc,virtual-dma-v1\0'
-            assert struct.unpack('>4I', device['reg']) == (0, 0x10010000, 0, 0x1000)
-            assert struct.unpack('>I', device['interrupts']) == (16,)
+            require(device['compatible'] == b'vsoc,virtual-dma-v1\0', 'DMA compatible mismatch')
+            require(struct.unpack('>4I', device['reg']) == (0, 0x10010000, 0, 0x1000), 'DMA MMIO mismatch')
+            require(struct.unpack('>I', device['interrupts']) == (16,), 'DMA IRQ mismatch')
             phandle = device['interrupt-parent']
-            assert any(props.get('phandle') == phandle and b'plic' in props.get('compatible', b'') for props in tree.values())
-    for args in [('-smp', '2'), ('-m', '64M'), ('-M', 'virt,dma=on,aia=aplic')]:
+            require(any(props.get('phandle') == phandle and b'plic' in props.get('compatible', b'') for props in tree.values()), 'DMA IRQ parent is not the PLIC')
+    rejected = [(args, 'virtual DMA requires') for args in
+                [('-smp', '2'), ('-m', '64M'), ('-M', 'virt,dma=on,aia=aplic')]]
+    rejected += [(('-global', f'virtual-dma.delay-ns={delay}'), 'delay-ns must be')
+                 for delay in (0, 1000000001, 18446744073709551615)]
+    for args, expected in rejected:
         cmd = [QEMU, '-M', 'virt,dma=on,aia=none', '-cpu', 'rv32', '-smp', '1', '-m', '128M', '-bios', 'none', '-display', 'none']
         cmd += args
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        assert proc.returncode != 0 and 'virtual DMA requires' in proc.stderr, proc.stderr
+        require(proc.returncode != 0 and expected in proc.stderr, proc.stderr)
     print('PASS platform DTB and configuration constraints')
 
 if __name__ == '__main__':

@@ -2,7 +2,7 @@
 
 A software-only virtual platform for developing and testing a DMA driver before hardware exists.
 
-**Status: all planned milestones complete. The full suite and demo pass in a fresh Linux arm64 container and hosted Linux x86-64 CI. See [validation evidence](docs/validation.md) for the tested environment and CI status.**
+**Status: all planned milestones complete; expanded edge-case audit verification is in progress. See [validation evidence](docs/validation.md) for the tested environment and CI status.**
 
 ## What this project does
 
@@ -70,6 +70,7 @@ The completion delay is a configurable virtual-time scheduling aid. It does **no
 - [Device specification](docs/device-spec.md): the shared contract for model, driver, and tests.
 - [Implementation plan](docs/implementation-plan.md): milestones, dependency order, and acceptance gates.
 - [Completion checklist](docs/completion.md): each requirement mapped to code and tests.
+- [Deep audit](docs/audit.md): fixes, regression evidence, and edge-case coverage.
 - [Demo](docs/demo.md): commands and observed firmware output.
 
 ## Build and test
@@ -80,7 +81,7 @@ From the repository root, with Docker running:
 ./scripts/test-in-container.sh
 ```
 
-This builds the development image, copies only project sources into a fresh Linux container, fetches and builds pinned QEMU, compiles eight RV32 firmware images, and runs the full suite plus the concise firmware demo. It copies logs and `summary.json` into `artifacts/` and removes its temporary container. No FPGA, host RISC-V toolchain, or host bind mount is needed. The first run needs network access and several minutes to compile QEMU. The Docker route was tested on an Apple Silicon Mac; the build/test processes run on Linux arm64.
+This builds the development image, copies only project sources into a fresh Linux container, fetches and builds pinned QEMU, compiles ten RV32 firmware images, and runs the full suite plus the concise firmware demo. It copies logs and `summary.json` into `artifacts/` and removes its temporary container. No FPGA, host RISC-V toolchain, or host bind mount is needed. The first run needs network access and several minutes to compile QEMU. The Docker route was tested on an Apple Silicon Mac; the build/test processes run on Linux arm64.
 
 Inside the development image or a Linux environment with the dependencies from `Dockerfile` installed:
 
