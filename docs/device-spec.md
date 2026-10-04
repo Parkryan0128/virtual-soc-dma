@@ -1,21 +1,21 @@
 # DMA device specification — v1
 
-Planning contract. Implementation and tests must follow these rules. Any required change must update this document before the affected milestone is accepted.
+Implemented v1 contract. Model, driver, and tests follow these rules. Any required change must update this document before the affected milestone is accepted.
 
 ## Platform
 
 One RV32 hart, little endian, M-mode bare metal, QEMU TCG, PLIC (`aia=none`), and exactly 128 MiB of RAM. Guest addresses are physical addresses; there is no guest virtual-memory translation or cache model.
 
 - RAM: `[0x80000000, 0x88000000)`.
-- DMA MMIO: proposed `[0x10010000, 0x10011000)`.
-- DMA interrupt: proposed PLIC source 16.
+- DMA MMIO: `[0x10010000, 0x10011000)`.
+- DMA interrupt: PLIC source 16.
 - UART: reused platform UART at `0x10000000`.
 
-DMA address/IRQ allocation must be checked against the pinned board memory map and all existing interrupt assignments in milestone 0. Freeze the confirmed values into a shared platform header used by firmware and model integration. The generated DTB must describe the same mapping; firmware may use the fixed header because v1 has one fixed platform.
+DMA address/IRQ allocation was checked against the pinned board memory map and all existing interrupt assignments. Confirmed values are frozen in `platform/platform.h`, shared by firmware and model integration. The generated DTB must describe the same mapping; firmware may use the fixed header because v1 has one fixed platform.
 
 ## Register map
 
-Only aligned 32-bit little-endian accesses are supported. Unsupported sizes/unaligned accesses must not mutate device state and are reported as invalid guest accesses. Reserved aligned offsets read as zero and ignore writes. Reserved bits read as zero and ignore writes.
+Only aligned 32-bit little-endian accesses are supported. Unsupported individual bus access sizes and unaligned accesses must not mutate device state and are reported as invalid guest accesses. QTest bulk writes may be split by QEMU into multiple legal 32-bit transactions; a `writeq` command is not proof of one 64-bit bus access on this RV32 platform. Reserved aligned offsets read as zero and ignore writes. Reserved bits read as zero and ignore writes.
 
 | Offset | Register | Access | Meaning |
 | --- | --- | --- | --- |
@@ -40,7 +40,7 @@ Exactly one recognized command bit must be written. Zero or multiple recognized 
 - Both complete ranges must lie in RAM. Validate with widened arithmetic; address addition must not wrap.
 - Source and destination must not overlap; identical addresses also produce overlap error. Device-register addresses are never valid DMA targets.
 - Invalid START immediately enters ERROR, sets ERROR_CODE and IRQ_PENDING, and performs no memory access or destination write.
-- Valid START enters BUSY and schedules a QEMU virtual-clock event after a host-configured delay (default proposed: 1 ms of virtual time).
+- Valid START enters BUSY and schedules a QEMU virtual-clock event after a host-configured delay (default: 1 ms of virtual time).
 - At completion, read the source and write the destination through QEMU guest physical-memory APIs, then publish DONE and IRQ_PENDING. Read the source at completion; firmware must leave source buffers unchanged until the transfer finishes.
 - Copy is a single bounded completion callback. Destination changes become visible at completion, not incrementally. Firmware must not access the destination while BUSY.
 - Allocation/mapping/internal API failures are model/test failures, not silently converted into a successful guest transfer.
@@ -63,7 +63,7 @@ ABORT in BUSY cancels completion, clears status/error/pending IRQ, and preserves
 
 ## Host-only fault injection
 
-Faults are test options, not guest-visible registers. Define exact QEMU option spelling during model integration.
+Faults are test options, not guest-visible registers. Set them with `-global virtual-dma.stall-next=on`, `-global virtual-dma.drop-irq-next=on`, and `-global virtual-dma.delay-ns=<nanoseconds>`. Delay must be 1–1,000,000,000 ns.
 
 - **stall-next:** the next valid START enters BUSY without scheduling completion. Consumed once; an invalid request does not consume it.
 - **drop-irq-next:** the next terminal event still sets DONE/ERROR and IRQ_PENDING but suppresses its external IRQ. Suppression lasts until ACK or RESET and is consumed once.

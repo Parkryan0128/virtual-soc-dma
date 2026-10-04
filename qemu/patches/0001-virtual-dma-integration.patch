@@ -1,0 +1,109 @@
+diff --git a/hw/dma/meson.build b/hw/dma/meson.build
+index cc7810b..2630d58 100644
+--- a/hw/dma/meson.build
++++ b/hw/dma/meson.build
+@@ -12,3 +12,4 @@ system_ss.add(when: 'CONFIG_OMAP', if_true: files('omap_dma.c', 'soc_dma.c'))
+ system_ss.add(when: 'CONFIG_RASPI', if_true: files('bcm2835_dma.c'))
+ system_ss.add(when: 'CONFIG_SIFIVE_PDMA', if_true: files('sifive_pdma.c'))
+ system_ss.add(when: 'CONFIG_XLNX_CSU_DMA', if_true: files('xlnx_csu_dma.c'))
++system_ss.add(when: 'CONFIG_RISCV_VIRT', if_true: files('virtual_dma.c'))
+diff --git a/hw/riscv/virt.c b/hw/riscv/virt.c
+index e517002..a15dfa0 100644
+--- a/hw/riscv/virt.c
++++ b/hw/riscv/virt.c
+@@ -43,6 +43,8 @@
+ #include "hw/intc/riscv_aplic.h"
+ #include "hw/intc/sifive_plic.h"
+ #include "hw/misc/sifive_test.h"
++#include "hw/dma/virtual_dma.h"
++#include "hw/dma/platform.h"
+ #include "hw/platform-bus.h"
+ #include "chardev/char.h"
+ #include "system/device_tree.h"
+@@ -1143,6 +1145,16 @@ static void finalize_fdt(RISCVVirtState *s)
+     create_fdt_uart(s, virt_memmap, irq_mmio_phandle);
+ 
+     create_fdt_rtc(s, virt_memmap, irq_mmio_phandle);
++    if (s->dma) {
++        const char *node = "/soc/dma@10010000";
++        void *fdt = MACHINE(s)->fdt;
++        qemu_fdt_add_subnode(fdt, node);
++        qemu_fdt_setprop_string(fdt, node, "compatible", "vsoc,virtual-dma-v1");
++        qemu_fdt_setprop_cells(fdt, node, "reg", 0, VSOC_DMA_BASE,
++                               0, VSOC_DMA_SIZE);
++        qemu_fdt_setprop_cell(fdt, node, "interrupt-parent", irq_mmio_phandle);
++        qemu_fdt_setprop_cell(fdt, node, "interrupts", VSOC_DMA_IRQ);
++    }
+ }
+ 
+ static void create_fdt(RISCVVirtState *s, const MemMapEntry *memmap)
+@@ -1686,6 +1698,21 @@ static void virt_machine_init(MachineState *machine)
+     s->fw_cfg = create_fw_cfg(machine);
+     rom_set_fw(s->fw_cfg);
+ 
++    if (s->dma) {
++        DeviceState *dma;
++        if (machine->smp.cpus != 1 || machine->ram_size != VSOC_RAM_SIZE ||
++            s->aia_type != VIRT_AIA_TYPE_NONE || !riscv_is_32bit(&s->soc[0])) {
++            error_report("virtual DMA requires RV32, one hart, 128 MiB and PLIC");
++            exit(1);
++        }
++        dma = qdev_new(TYPE_VIRTUAL_DMA);
++        object_property_add_child(OBJECT(machine), "virtual-dma", OBJECT(dma));
++        sysbus_realize_and_unref(SYS_BUS_DEVICE(dma), &error_fatal);
++        sysbus_mmio_map(SYS_BUS_DEVICE(dma), 0, VSOC_DMA_BASE);
++        sysbus_connect_irq(SYS_BUS_DEVICE(dma), 0,
++                           qdev_get_gpio_in(mmio_irqchip, VSOC_DMA_IRQ));
++    }
++
+     /* SiFive Test MMIO device */
+     sifive_test_create(memmap[VIRT_TEST].base);
+ 
+@@ -1911,11 +1938,22 @@ static void virt_machine_device_plug_cb(HotplugHandler *hotplug_dev,
+     }
+ }
+ 
++static bool virt_get_dma(Object *obj, Error **errp)
++{
++    return RISCV_VIRT_MACHINE(obj)->dma;
++}
++
++static void virt_set_dma(Object *obj, bool value, Error **errp)
++{
++    RISCV_VIRT_MACHINE(obj)->dma = value;
++}
++
+ static void virt_machine_class_init(ObjectClass *oc, void *data)
+ {
+     MachineClass *mc = MACHINE_CLASS(oc);
+     HotplugHandlerClass *hc = HOTPLUG_HANDLER_CLASS(oc);
+ 
++    object_class_property_add_bool(oc, "dma", virt_get_dma, virt_set_dma);
+     mc->desc = "RISC-V VirtIO board";
+     mc->init = virt_machine_init;
+     mc->max_cpus = VIRT_CPUS_MAX;
+diff --git a/include/hw/riscv/virt.h b/include/hw/riscv/virt.h
+index 48a14be..e9aa5d8 100644
+--- a/include/hw/riscv/virt.h
++++ b/include/hw/riscv/virt.h
+@@ -55,6 +55,7 @@ struct RISCVVirtState {
+ 
+     int fdt_size;
+     bool have_aclint;
++    bool dma;
+     RISCVVirtAIAType aia_type;
+     int aia_guests;
+     char *oem_id;
+diff --git a/tests/qtest/meson.build b/tests/qtest/meson.build
+index 3136d15..4f0afd2 100644
+--- a/tests/qtest/meson.build
++++ b/tests/qtest/meson.build
+@@ -271,7 +271,7 @@ qtests_s390x = \
+    'cpu-plug-test',
+    'migration-test']
+ 
+-qtests_riscv32 = \
++qtests_riscv32 = ['virtual-dma-test'] + \
+   (config_all_devices.has_key('CONFIG_SIFIVE_E_AON') ? ['sifive-e-aon-watchdog-test'] : [])
+ 
+ qtests_riscv64 = ['riscv-csr-test'] + \

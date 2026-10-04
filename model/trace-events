@@ -1,0 +1,8 @@
+# virtual_dma.c
+virtual_dma_start(uint32_t src, uint32_t dst, uint32_t len) "src=0x%08x dst=0x%08x len=%u"
+virtual_dma_schedule(int64_t deadline) "deadline_ns=%" PRId64
+virtual_dma_result(uint32_t status, uint32_t error) "status=%u error=%u"
+virtual_dma_irq(int level) "level=%d"
+virtual_dma_cancel(uint32_t command) "command=%u"
+virtual_dma_ignore(uint64_t offset, uint64_t value, uint32_t status) "offset=0x%" PRIx64 " value=0x%" PRIx64 " status=%u"
+virtual_dma_fault(const char *kind) "kind=%s"

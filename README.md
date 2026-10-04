@@ -2,7 +2,7 @@
 
 A software-only virtual platform for developing and testing a DMA driver before hardware exists.
 
-**Status: scope and implementation plan only. No device model, firmware, or passing test results exist yet.**
+**Status: v1 implemented. Native device tests and real RV32 firmware scenarios pass locally in a Linux container. See [validation evidence](docs/validation.md) for the tested environment and CI status.**
 
 ## What this project does
 
@@ -22,7 +22,7 @@ Example: firmware requests a 1 KiB copy, continues a small CPU task while the de
 | Failure controls | Host-side options for stalled completion and dropped IRQ |
 | Deliverable | Reproducible build, automated suite, text demo, traces, and documented contract |
 
-The DMA model and QEMU integration will use **C**, following QEMU's native device interfaces. Firmware uses C with minimal RISC-V assembly. Python orchestrates builds/tests and validates logs. This replaces the earlier C++ model proposal with a simpler in-process QEMU integration.
+The DMA model and QEMU integration will use **C**, following QEMU's native device interfaces. Firmware uses C with minimal RISC-V assembly. Python orchestrates builds/tests and validates logs.
 
 ## Architecture
 
@@ -39,7 +39,7 @@ flowchart LR
 
 Two different binaries are built: the host-native QEMU executable containing the device model, and a RISC-V `firmware.elf` executed by the emulated CPU. The firmware does not call the host model directly; all interaction crosses the guest MMIO/interrupt interface.
 
-QEMU is an external, pinned dependency. Store our device sources, integration patches, firmware, and tests in this repository. Do not vendor the whole QEMU tree. Start from QEMU `v10.0.0` as a fixed compatibility baseline, not a claim about the latest release; record its resolved commit during bring-up.
+QEMU is an external, pinned dependency. Store our device sources, integration patches, firmware, and tests in this repository. Do not vendor the whole QEMU tree. QEMU `v10.0.0` is pinned to commit `7c949c53e936aa3a658d84ab53bae5cadaa5d59c`.
 
 Integration: add an opt-in DMA option to the existing `virt` board, reserve its MMIO region and PLIC source, and include its node in the generated device tree. Preserve default `virt` behavior when the option is disabled. A stock QEMU binary will not contain this custom device.
 
@@ -70,7 +70,47 @@ The completion delay is a configurable virtual-time scheduling aid. It does **no
 - [Device specification](docs/device-spec.md): the shared contract for model, driver, and tests.
 - [Implementation plan](docs/implementation-plan.md): milestones, dependency order, and acceptance gates.
 
-Build/run commands will be added when they actually work. This planning commit intentionally contains no placeholder executable scripts.
+## Build and test
+
+From the repository root, with Docker running:
+
+```sh
+./scripts/test-in-container.sh
+```
+
+This builds the development image, copies only project sources into a fresh Linux container, fetches and builds pinned QEMU, compiles six RV32 firmware images, and runs the full suite. It copies logs and `summary.json` into `artifacts/` and removes its temporary container. No FPGA, host RISC-V toolchain, or host bind mount is needed. The first run needs network access and several minutes to compile QEMU. The Docker route was tested on an Apple Silicon Mac; the build/test processes run on Linux arm64.
+
+Inside the development image or a Linux environment with the dependencies from `Dockerfile` installed:
+
+```sh
+./scripts/build-firmware.sh
+./scripts/build-qemu.sh
+python3 scripts/run-tests.py
+./scripts/run-demo.sh
+```
+
+For incremental work, these commands reuse `build/`. `--stage boot`, `--stage detect`, `--stage polling`, and `--stage irq` restrict the firmware scenarios. Run the default full suite before publishing changes.
+
+Host-only device options:
+
+```text
+-M virt,dma=on,aia=none -cpu rv32 -smp 1 -m 128M
+-global virtual-dma.delay-ns=1000000
+-global virtual-dma.stall-next=on
+-global virtual-dma.drop-irq-next=on
+```
+
+The model is instantiated by the patched board, not a standalone `-device` command. Unsupported DMA platform configurations are rejected. VM migration/snapshots are outside v1 and the device explicitly blocks migration.
+
+## Debugging
+
+Each firmware scenario writes UART output to `artifacts/<scenario>/stdout.log`, QEMU diagnostics to `stderr.log`, and DMA events to `model.trace`. Device tests have their own `qtest/` logs. The platform test checks the generated DTB against the address/interrupt contract. A host watchdog treats hangs as failures.
+
+To inspect firmware in a debugger, add `-S -gdb tcp::1234` to the scenario command recorded in `artifacts/summary.json`, then connect a RISC-V-capable GDB and load its ELF symbols. Omit the test runner watchdog for an interactive debugging session.
+
+## License
+
+Firmware, scripts, shared register headers, and documentation use the MIT license. QEMU device code, native QTest code, and integration patches use GPL-2.0-or-later. See [LICENSE](LICENSE) and [GPL text](LICENSES/GPL-2.0.txt). QEMU retains its own upstream licensing.
 
 ## References
 

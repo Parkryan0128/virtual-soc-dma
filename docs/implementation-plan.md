@@ -1,5 +1,9 @@
 # Implementation plan
 
+## Progress
+
+Milestones 0–4 passed their local acceptance gates during incremental implementation. Milestone 5 includes a fresh-container build, CI workflow, documentation, and a reproducible demo; actual evidence and remaining checks are tracked in [validation.md](validation.md). The sections below preserve the gate definitions used for implementation.
+
 ## Objective and boundary
 
 Deliver one executable demonstration of pre-silicon software validation: boot a RISC-V firmware binary on a virtual platform, control a custom DMA device through MMIO, handle interrupts, and recover from injected failures.
