@@ -2,7 +2,7 @@
 
 ## Progress
 
-Milestones 0–4 passed their local acceptance gates during incremental implementation. Milestone 5 includes a fresh-container build, CI workflow, documentation, and a reproducible demo; actual evidence and remaining checks are tracked in [validation.md](validation.md). The sections below preserve the gate definitions used for implementation.
+All milestones 0–5 are complete. Incremental acceptance gates passed, the source-only fresh Linux container passed the full suite, and hosted GitHub Actions validation succeeded. Actual environment/results are recorded in [validation.md](validation.md). The sections below preserve the gate definitions used for implementation.
 
 ## Objective and boundary
 
@@ -103,7 +103,7 @@ Linux is the initial required build/CI environment. Document macOS prerequisites
 ## Milestone 5 — Clean build, CI, and demo
 
 1. Provide documented scripts to fetch the exact QEMU commit, apply patches, build both binaries, and run the full suite.
-2. Test the full dependency path from a clean Linux environment. Pin the tested compiler/dependency setup; validate downloaded revision/checksums as appropriate. Cache builds using the QEMU revision and patch/toolchain inputs.
+2. Test the full dependency path from a clean Linux environment. Pin the tested compiler/dependency setup; validate downloaded revision/checksums as appropriate. Reuse Docker dependency-image layers; the clean verification path deliberately rebuilds QEMU and firmware. Incremental Linux scripts reuse the pinned checkout/build directory.
 3. Add Linux CI for QTest plus firmware scenarios; upload UART/model traces and a structured summary on failure.
 4. Add a short text demo: boot, device detection, interrupt copy, stall timeout/recovery, dropped-IRQ timeout/recovery, final suite result. Generate actual output before documenting it.
 5. Document commands, architecture, limitations, debugging with traces/GDB, and attribution/license requirements for QEMU-derived code. Preserve upstream notices in integration patches and choose compatible licenses for added device code before code publication.

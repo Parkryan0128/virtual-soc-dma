@@ -30,9 +30,11 @@ The full device suite contains **10 native QTest cases**, with parameterized tra
 
 ## Clean-build and CI status
 
-A source-only fresh-container run is in progress at this document revision. Its source archive excludes `build/`, `artifacts/`, and `.git`, so it cannot reuse local QEMU binaries or prior firmware objects. The final observed outcome will replace this paragraph before delivery.
+A source-only fresh-container run completed successfully with exit status 0. Its source archive excluded `build/`, `artifacts/`, and `.git`: pinned QEMU and all firmware were built again from source. All 10 QTests, all 6 firmware scenarios, and the platform check passed.
 
-A Linux x86_64 GitHub Actions workflow is provided. Remote CI results must be verified separately; a passing local arm64 run is not evidence of a passing hosted x86_64 run.
+The hosted GitHub Actions Linux validation completed successfully for implementation commit `faa2afeeb0a2d47c1e727e824dd914395507a94f`. It independently built the source-only Linux container and ran the complete device, platform, and firmware suite. [Successful CI run](https://github.com/Parkryan0128/virtual-soc-dma/actions/runs/37171162478).
+
+The subsequent commit updates documentation only; the executable source is identical to that validated implementation commit.
 
 ## Evidence locations
 
