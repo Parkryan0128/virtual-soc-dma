@@ -118,6 +118,14 @@
     ]
   },
   {
+    "name": "irq_init",
+    "stage": "irq",
+    "trace": true,
+    "expected": [
+      "PASS IRQ initialization drains masked PLIC events\n"
+    ]
+  },
+  {
     "name": "irq_deadline",
     "stage": "irq",
     "trace": true,

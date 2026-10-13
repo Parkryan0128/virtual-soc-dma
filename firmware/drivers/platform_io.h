@@ -17,6 +17,6 @@ static inline void mmio_write(uint32_t a, uint32_t v)
 }
 void uart_puts(const char *s);
 void uart_hex(uint32_t v);
-uint32_t timer_ticks(void);
+uint64_t timer_ticks(void);
 void finish(int passed) __attribute__((noreturn));
 #endif

@@ -61,8 +61,8 @@ int main(void)
     require(dma_irq_wait(&result) == 0 && result.status == DMA_DONE &&
                 result.error == 0 && dma_irq_count() == 1,
             "recovery interrupt");
-    uint32_t start = timer_ticks();
-    while ((uint32_t)(timer_ticks() - start) < DMA_TIMEOUT_TICKS * 2) {
+    uint64_t start = timer_ticks();
+    while ((timer_ticks() - start) < DMA_TIMEOUT_TICKS * 2) {
     }
     for (unsigned i = 1; i <= 1024; i++) {
         require(fresh_destination[i] == fresh_source[i] &&

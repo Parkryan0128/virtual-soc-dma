@@ -30,11 +30,11 @@ int main(void)
     require(dma_poll(&status, 0) == -3, "missing error output");
     /* Cross the low 32-bit timer wrap during the bounded wait. */
     mmio_write(VSOC_MTIME, UINT32_MAX - DMA_TIMEOUT_TICKS / 2);
-    uint32_t start = timer_ticks();
+    uint64_t start = timer_ticks();
     require(dma_poll(&status, &error) == -1 && status == DMA_BUSY && error == 0,
             "polling timeout diagnostics");
-    require(timer_ticks() < start &&
-                (uint32_t)(timer_ticks() - start) >= DMA_TIMEOUT_TICKS,
+    require((uint32_t)timer_ticks() < (uint32_t)start &&
+                (timer_ticks() - start) >= DMA_TIMEOUT_TICKS,
             "polling deadline survives timer wrap");
     require(dma_read(DMA_STATUS) == 0 && dma_read(DMA_IRQ_PENDING) == 0 &&
                 destination == 0xa5a5a5a5,

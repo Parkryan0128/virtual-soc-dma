@@ -83,14 +83,15 @@ def run(
                 record["reason"] = "host watchdog expired"
             except BaseException:
                 stop_process_group(proc)
-                proc.communicate()
+                stdout, stderr = proc.communicate()
                 raise
             record["exit_code"] = proc.returncode
     except OSError as exc:
         record["reason"] = str(exc)
         stderr = (str(exc) + "\n").encode()
-    (artifact / "stdout.log").write_bytes(stdout)
-    (artifact / "stderr.log").write_bytes(stderr)
+    finally:
+        (artifact / "stdout.log").write_bytes(stdout)
+        (artifact / "stderr.log").write_bytes(stderr)
     try:
         output = stdout.decode("utf-8")
     except UnicodeDecodeError:
@@ -268,5 +269,11 @@ def main():
     return 0 if passed else 1
 
 
+def terminate(signum, _frame):
+    # Unwind through run() so SIGTERM also kills QEMU and retains diagnostics.
+    raise SystemExit(128 + signum)
+
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, terminate)
     sys.exit(main())

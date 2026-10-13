@@ -15,8 +15,8 @@ static void require(int condition, const char *label)
 
 static void delay(uint32_t ticks)
 {
-    uint32_t start = timer_ticks();
-    while ((uint32_t)(timer_ticks() - start) < ticks) {
+    uint64_t start = timer_ticks();
+    while ((timer_ticks() - start) < ticks) {
     }
 }
 
@@ -69,6 +69,31 @@ int main(void)
                     result.status == DMA_DONE,
                 "reuse after late interrupt");
     }
+
+    /* Advance by a whole low-word timer period, as if interrupts remained
+     * masked during more than seven minutes of foreground work. */
+    dma_write(DMA_IRQ_ENABLE, 0);
+    submit();
+    delay(20000);
+    require(dma_read(DMA_STATUS) == DMA_DONE, "long delay completion");
+    mmio_write(VSOC_MTIME + 4, mmio_read(VSOC_MTIME + 4) + 1);
+    dma_write(DMA_IRQ_ENABLE, 1);
+    delay(1000);
+    require(dma_irq_wait(&result) == DMA_WAIT_TIMEOUT &&
+                result.status == DMA_DONE && result.pending == 1,
+            "whole timer period cannot revive expired IRQ request");
+
+    dma_write(DMA_IRQ_ENABLE, 0);
+    submit();
+    delay(20000);
+    mmio_write(VSOC_MTIME + 4, mmio_read(VSOC_MTIME + 4) + 1);
+    uint64_t before = timer_ticks();
+    require(dma_irq_wait(&result) == DMA_WAIT_TIMEOUT &&
+                (timer_ticks() - before) < DMA_TIMEOUT_TICKS / 2,
+            "whole timer period cannot restart wait deadline");
+    submit();
+    require(dma_irq_wait(&result) == DMA_WAIT_OK && destination == source,
+            "reuse after long delay");
     uart_puts("PASS IRQ submission deadline and delayed wait\n");
     finish(1);
 }

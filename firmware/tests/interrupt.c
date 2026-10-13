@@ -52,8 +52,8 @@ int main(void)
     require(dma_irq_wait(&result) == 0 && result.status == DMA_ERROR &&
                 result.error == DMA_ERR_DST,
             "error ISR");
-    uint32_t start = timer_ticks();
-    while ((uint32_t)(timer_ticks() - start) < 20000) {
+    uint64_t start = timer_ticks();
+    while ((timer_ticks() - start) < 20000) {
     }
     require(dma_irq_count() == 5, "no interrupt storm");
     uart_puts("PASS interrupt suite\n");

@@ -19,8 +19,8 @@ static void submit(void)
 }
 static void delay(uint32_t ticks)
 {
-    uint32_t start = timer_ticks();
-    while ((uint32_t)(timer_ticks() - start) < ticks) {
+    uint64_t start = timer_ticks();
+    while ((timer_ticks() - start) < ticks) {
     }
 }
 static void complete(void)
@@ -41,15 +41,15 @@ int main(void)
     require(dma_irq_wait(&result) == -2 && result.status == 0xdead,
             "idle IRQ wait");
     mmio_write(VSOC_MTIME, UINT32_MAX - DMA_TIMEOUT_TICKS / 2);
-    uint32_t start = timer_ticks();
+    uint64_t start = timer_ticks();
     submit(); /* One-shot stall, as in the polling edge scenario. */
     require(dma_irq_wait(0) == -3 && dma_read(DMA_STATUS) == DMA_BUSY,
             "invalid IRQ output preserves request");
     require(dma_irq_wait(&result) == -1 && result.status == DMA_BUSY &&
                 !result.pending,
             "IRQ timeout diagnostics");
-    require(timer_ticks() < start &&
-                (uint32_t)(timer_ticks() - start) >= DMA_TIMEOUT_TICKS,
+    require((uint32_t)timer_ticks() < (uint32_t)start &&
+                (timer_ticks() - start) >= DMA_TIMEOUT_TICKS,
             "IRQ deadline survives timer wrap");
     submit();
     complete();

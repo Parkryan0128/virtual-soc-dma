@@ -3,7 +3,7 @@
 static volatile uint32_t irq_done, irq_status, irq_error, irq_pending,
     irq_count;
 static volatile uint32_t irq_timed_out;
-static uint32_t submitted_at;
+static uint64_t submitted_at;
 static int outstanding;
 extern void trap_entry(void);
 
@@ -28,9 +28,9 @@ int dma_poll(uint32_t *status, uint32_t *error)
     if (dma_read(DMA_STATUS) == 0) {
         return DMA_WAIT_NO_REQUEST;
     }
-    uint32_t start = timer_ticks();
+    uint64_t start = timer_ticks();
     while (dma_read(DMA_STATUS) == DMA_BUSY) {
-        if ((uint32_t)(timer_ticks() - start) >= DMA_TIMEOUT_TICKS) {
+        if (timer_ticks() - start >= DMA_TIMEOUT_TICKS) {
             DMAResult result = read_result();
             /* A result that became visible at the deadline still succeeds. */
             if (result.status != DMA_BUSY) {
@@ -111,10 +111,12 @@ int dma_irq_cancel(void)
 void dma_irq_init(void)
 {
     interrupt_lock();
-    reset_locked();
     mmio_write(VSOC_PLIC_BASE + VSOC_DMA_IRQ * 4, 1);
     mmio_write(VSOC_PLIC_ENABLE, 1u << VSOC_DMA_IRQ);
     mmio_write(VSOC_PLIC_THRESHOLD, 0);
+    /* Claims are invisible while priority, enable or threshold masks them.
+     * Configure routing before reset drains completions left by old code. */
+    reset_locked();
     __asm__ volatile("csrw mtvec, %0" ::"r"((uintptr_t)trap_entry) : "memory");
     __asm__ volatile("csrs mie, %0" ::"r"(1u << 11) : "memory");
     dma_write(DMA_IRQ_ENABLE, 1);
@@ -145,7 +147,7 @@ int dma_irq_wait(DMAResult *result)
         return DMA_WAIT_NO_REQUEST;
     }
     while (!irq_done) {
-        if ((uint32_t)(timer_ticks() - submitted_at) >= DMA_TIMEOUT_TICKS) {
+        if (timer_ticks() - submitted_at >= DMA_TIMEOUT_TICKS) {
             uint32_t previous = interrupt_lock();
             /* Do not misreport a completion delivered at the deadline. */
             if (irq_done) {
@@ -192,8 +194,7 @@ void trap_handler(void)
     }
     /* Judge delivery when the ISR runs, not when foreground consumes it.
      * A late IRQ must not turn an expired request into a successful wait. */
-    irq_timed_out =
-        (uint32_t)(timer_ticks() - submitted_at) > DMA_TIMEOUT_TICKS;
+    irq_timed_out = timer_ticks() - submitted_at > DMA_TIMEOUT_TICKS;
     irq_status = dma_read(DMA_STATUS);
     irq_error = dma_read(DMA_ERROR_CODE);
     irq_pending = dma_read(DMA_IRQ_PENDING);

@@ -18,9 +18,15 @@ void uart_hex(uint32_t v)
     }
     uart_puts(out);
 }
-uint32_t timer_ticks(void)
+uint64_t timer_ticks(void)
 {
-    return mmio_read(VSOC_MTIME);
+    uint32_t high, low;
+    /* RV32 needs two loads for mtime. Retry if the low word rolled over. */
+    do {
+        high = mmio_read(VSOC_MTIME + 4);
+        low = mmio_read(VSOC_MTIME);
+    } while (high != mmio_read(VSOC_MTIME + 4));
+    return ((uint64_t)high << 32) | low;
 }
 void finish(int passed)
 {

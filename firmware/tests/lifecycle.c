@@ -15,8 +15,8 @@ static void require(int condition, const char *label)
 
 static void delay(uint32_t ticks)
 {
-    uint32_t start = timer_ticks();
-    while ((uint32_t)(timer_ticks() - start) < ticks) {
+    uint64_t start = timer_ticks();
+    while ((timer_ticks() - start) < ticks) {
     }
 }
 

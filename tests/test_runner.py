@@ -4,6 +4,10 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
+import shutil
+import signal
+import subprocess
 import sys
 import tempfile
 import time
@@ -102,6 +106,86 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn(
             b"BOOT partial", (runner.ROOT / "artifacts/fixture/stdout.log").read_bytes()
         )
+
+    @unittest.skipUnless(sys.platform in ("linux", "darwin"), "POSIX signals")
+    def test_interruption_retains_output_and_terminates_descendants(self):
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            with self.subTest(signal=signum):
+                root = runner.ROOT / signum.name
+                scripts = root / "scripts"
+                scripts.mkdir(parents=True)
+                for name in ("run-tests.py", "firmware_scenarios.py"):
+                    shutil.copyfile(Path(runner.__file__).parent / name, scripts / name)
+                manifest = root / "tests/scenarios/firmware.json"
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(
+                    json.dumps(
+                        [dict(name="boot", stage="boot", expected=["PASS boot"])]
+                    )
+                )
+                ready, leaked = root / "ready", root / "leaked"
+                child = (
+                    "import time; from pathlib import Path; time.sleep(1); "
+                    f"Path({str(leaked)!r}).touch()"
+                )
+                binary = root / "build/qemu/qemu-system-riscv32"
+                binary.parent.mkdir(parents=True)
+                binary.write_text(
+                    "#!" + sys.executable + "\n"
+                    "import os, subprocess, sys, time\nfrom pathlib import Path\n"
+                    f"subprocess.Popen([sys.executable, '-c', {child!r}])\n"
+                    "print('BOOT partial', flush=True)\n"
+                    "print('diagnostic partial', file=sys.stderr, flush=True)\n"
+                    f"Path({str(ready)!r}).write_text(str(os.getpid()))\n"
+                    "time.sleep(60)\n"
+                )
+                binary.chmod(0o755)
+                process = subprocess.Popen(
+                    [
+                        sys.executable,
+                        str(scripts / "run-tests.py"),
+                        "--scenario",
+                        "boot",
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                try:
+                    deadline = time.monotonic() + 5
+                    while not ready.exists() and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    self.assertTrue(ready.exists(), "fixture did not start")
+                    process.send_signal(signum)
+                    process.communicate(timeout=5)
+                    self.assertNotEqual(process.returncode, 0)
+                    time.sleep(1.1)
+                    self.assertFalse(
+                        leaked.exists(), "descendant survived interruption"
+                    )
+                    artifacts = root / "artifacts/scenarios/boot"
+                    self.assertTrue(
+                        (artifacts / "stdout.log").exists(),
+                        "interruption discarded UART output",
+                    )
+                    self.assertIn(
+                        "BOOT partial", (artifacts / "stdout.log").read_text()
+                    )
+                    self.assertIn(
+                        "diagnostic partial", (artifacts / "stderr.log").read_text()
+                    )
+                    summary = root / "artifacts/scenarios/boot-summary.json"
+                    self.assertFalse(
+                        all(r["passed"] for r in json.loads(summary.read_text()))
+                    )
+                finally:
+                    if ready.exists():
+                        try:
+                            os.killpg(int(ready.read_text()), signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                    if process.poll() is None:
+                        process.kill()
+                    process.communicate()
 
     def test_complete_tap_plan_passes(self):
         self.assertIsNone(runner.tap_failure("1..2\nok 1 /a\nok 2 /b\n"))

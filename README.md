@@ -88,6 +88,8 @@ A full run writes `artifacts/summary.json` plus each group's UART output, QEMU d
 
 Each result records the command, exit code and artifact directory in the execution environment. The runner requires successful exit and complete expected output; guest programs check actual data, source preservation and guard bytes before reporting success. A host watchdog treats hangs as failures. GitHub Actions runs the same clean-container suite and uploads `artifacts/`.
 
+Interrupting the native runner with Ctrl-C or SIGTERM stops its child processes and keeps the UART and diagnostic output collected so far. The summary remains marked incomplete.
+
 For interactive debugging, use a scenario's recorded QEMU command with `-S -gdb tcp::1234` and attach a RISC-V-capable GDB using the matching ELF. Run QEMU directly so the test runner's watchdog does not end the debugging session.
 
 ## License and references
