@@ -1,101 +1,77 @@
 # virtual-soc-dma
 
-A virtual DMA device and bare-metal RISC-V driver for testing firmware before hardware exists.
+A DMA device for QEMU and a bare-metal RISC-V driver. The firmware copies memory through MMIO, handles PLIC interrupts, and recovers from stalled transfers and missing interrupts.
 
-The firmware runs as a cross-compiled RV32 ELF inside QEMU. It programs the DMA through MMIO, receives a PLIC interrupt, and checks the copied memory. Host-side fault options simulate a stalled transfer or a missing interrupt so the driver can exercise timeouts and recovery.
+The model uses a fixed completion delay (1 ms by default). It tests firmware behavior, not hardware bandwidth or bus timing.
 
-```text
-RV32 firmware → MMIO registers → DMA model → guest RAM
-      ↑                             │
-      └──── machine interrupt ← PLIC┘
-```
+## Run
 
-## Scope
-
-- QEMU `virt`, one RV32 hart, M-mode bare metal, 128 MiB RAM, no OS.
-- One DMA channel for contiguous RAM-to-RAM copies of 1–65,536 bytes.
-- Polling and interrupt APIs, validation errors, abort/reset, bounded waits and reuse after failure.
-- QTest device tests and end-to-end firmware scenarios, built and run in Linux containers.
-
-QEMU supplies the CPU, RAM, UART, timer and PLIC. This repository supplies the DMA model, board integration, driver and tests. The pinned dependency is QEMU `v10.0.0`, commit `7c949c53e936aa3a658d84ab53bae5cadaa5d59c`; a stock QEMU binary does not contain the device.
-
-The model copies all bytes at one completion event. Its configurable virtual-time delay demonstrates asynchronous operation; it does not model bandwidth, bus contention or real-chip performance. RTL, FPGA, Linux drivers, cache coherency, IOMMU, scatter-gather and multiple channels are outside this project's scope.
-
-## Implementation checkpoints
-
-| Checkpoint | Implemented behavior | Verification |
-| --- | --- | --- |
-| Boot and integration | RV32 startup, UART/timer, opt-in DMA and DTB node | Boot/detection firmware, register and platform tests |
-| Transfers | Asynchronous copy, range/length/overlap checks, polling | QTest memory/boundary cases and polling firmware |
-| Interrupts | PLIC routing, trap/ISR handling, nonblocking submission | Interrupt firmware, pending-IRQ delivery and deadline cases |
-| Recovery | Abort/reset, cancellation races, stall/lost-IRQ timeouts, fresh transfers | QTest lifecycle/fault cases and recovery firmware |
-| Build and validation | Pinned QEMU, firmware builds, full suite and short demo | Clean container run and GitHub Actions |
-
-This is the complete single-channel bare-metal scope. Adding an OS driver or RTL would be a separate extension.
-
-## Layout
-
-```text
-model/              QEMU DMA device and trace events
-platform/           Shared addresses and register definitions
-firmware/           Startup/traps, driver and guest test programs
-qemu/               Pinned revision and board/build integration patch
-scripts/            Build scripts, test runner and platform checks
-tests/              QTest cases, scenario manifest and host regression tests
-docs/device-spec.md Device and driver contract
-```
-
-The [device specification](docs/device-spec.md) defines the registers, state transitions, fault controls and driver return values.
-
-## Build and run
-
-With Docker running, from the repository root:
+With Docker running:
 
 ```sh
-make test   # clean build, full validation suite, then the short demo
-make demo   # clean build and six demonstration scenarios
+make test   # build QEMU and firmware, run all tests and the demo
+make demo   # build and run six demo scenarios
 ```
 
-The wrapper builds the Linux toolchain image, copies project sources into a disposable container, fetches pinned QEMU, and cross-compiles the firmware. It requires network access on the first run and takes several minutes. It does not need a host RISC-V compiler or a host bind mount.
+The first build downloads [pinned QEMU](qemu/base-version.txt) and the Linux toolchain. It takes a few minutes; no host RISC-V compiler is needed.
 
-For incremental work inside a Linux environment with the dependencies from `Dockerfile`:
+For incremental work inside the Linux toolchain environment from `Dockerfile`:
 
 ```sh
 make build
 python3 scripts/run-tests.py
 python3 scripts/run-tests.py --scenario lifecycle
-./scripts/run-demo.sh
+python3 scripts/run-tests.py --demo
 ```
 
-A failed firmware or QEMU build invalidates its executable outputs, preventing tests from running old or partially updated binaries. `--stage boot`, `detect`, `polling` and `irq` select progressively broader checks; run the full suite before publishing changes.
+Results go to `artifacts/summary.json`, with UART logs, QEMU diagnostics and DMA traces in each test's directory. Demo results live under `artifacts/demo/`. CI runs the same container tests and uploads these files.
 
-The demo covers boot, detection, interrupt copies, abort/reset, a stalled transfer and a dropped IRQ. In the stall case memory remains unchanged. In the dropped-IRQ case the copy finishes but the driver's interrupt wait times out. Both reset the device and complete a fresh transfer.
+## Device
 
-Host fault options used by the test runner:
+The platform is fixed: QEMU `virt`, one RV32 hart, M-mode, 128 MiB RAM and PLIC (`aia=none`). Enable the device with `-M virt,dma=on,aia=none`; stock QEMU does not include it.
+
+- RAM: `0x80000000`–`0x87ffffff`.
+- DMA registers: `0x10010000`–`0x10010fff`, aligned 32-bit little-endian access.
+- PLIC interrupt: 16.
+- One channel, RAM-to-RAM copies of 1–65,536 bytes. Byte-aligned buffers are allowed; overlapping buffers are rejected.
+
+Addresses and register constants are shared in [platform/](platform/).
+
+| Offset | Register | Meaning |
+| --- | --- | --- |
+| `0x00` | ID | `0x56444d41` (read-only) |
+| `0x04` | VERSION | `0x00010000` (read-only) |
+| `0x08` | SRC | Source address |
+| `0x0c` | DST | Destination address |
+| `0x10` | LEN | Byte count |
+| `0x14` | COMMAND | START=1, ABORT=2, ACK=4, RESET=8; reads as zero |
+| `0x18` | STATUS | IDLE=0, BUSY=1, DONE=2, ERROR=4 (read-only) |
+| `0x1c` | ERROR_CODE | Length=1, source=2, destination=3, overlap=4 (read-only) |
+| `0x20` | IRQ_ENABLE | Bit 0 enables the interrupt |
+| `0x24` | IRQ_PENDING | Sticky completion/error flag (read-only) |
+
+START accepts work only in IDLE and snapshots SRC/DST/LEN. Validation checks length, source range, destination range, then overlap. Invalid requests report an error without copying. A valid transfer reads the source and copies all bytes at completion, so leave both buffers alone while BUSY.
+
+Write one command bit at a time. START and SRC/DST/LEN writes are ignored while BUSY. ACK clears DONE/ERROR and the pending flag; ABORT cancels BUSY work; RESET cancels work and clears writable registers, including IRQ_ENABLE. ACK and ABORT preserve the transfer configuration. Reserved offsets/bits and writes to read-only registers are ignored. Unsupported access widths or alignment do not change device state.
+
+Completion and errors set IRQ_PENDING; the IRQ line follows `IRQ_ENABLE && IRQ_PENDING`. The ISR records the result, ACKs the DMA, then completes the PLIC claim. Enabling IRQ after completion delivers the pending event.
+
+## Driver and tests
+
+The [driver](firmware/drivers/dma.h) has polling and interrupt APIs. Use one mode per request, from foreground code on the single hart. IRQ mode allows one outstanding request; consume or reset its result before submitting again.
+
+Wait results are `0` for a terminal result (check DONE/ERROR), `-1` for timeout, `-2` for no request and `-3` for a null output pointer. Invalid/no-request calls leave outputs and device state unchanged. Timeouts preserve diagnostics and reset the device; IRQ reset also drains old PLIC events and re-enables device IRQs.
+
+The 10 ms deadline starts at submission for IRQ mode and at wait for polling. IRQ mode requires timely ISR delivery: a result read later still succeeds, but a late or lost IRQ times out even if the copy finished. Cancel succeeds only while BUSY; if completion wins the race, its result remains available to wait.
+
+QTest checks registers, memory, timing and IRQ wiring. Guest firmware tests polling, interrupts, cancellation and recovery. Host tests cover the build scripts and test runner. Test faults are one-shot:
 
 ```text
--M virt,dma=on,aia=none -cpu rv32 -smp 1 -m 128M
--global virtual-dma.delay-ns=1000000
--global virtual-dma.stall-next=on
--global virtual-dma.drop-irq-next=on
+-global virtual-dma.stall-next=on       # next valid transfer stays BUSY
+-global virtual-dma.drop-irq-next=on    # next DONE/ERROR has no external IRQ
+-global virtual-dma.delay-ns=1000000    # completion delay: 1–1,000,000,000 ns
 ```
 
-The patched board creates the device; it is not a standalone `-device` option. Unsupported DMA platform configurations are rejected, and VM migration is disabled for this device.
+For debugging, add `-S -gdb tcp::1234` to a recorded QEMU command and run it directly, outside the test runner's watchdog.
 
-## Test output and debugging
-
-A full run writes `artifacts/summary.json` plus each group's UART output, QEMU diagnostics and DMA traces. The demo uses `artifacts/demo/`, stage runs use `artifacts/stages/<stage>/`, and individual scenarios use `artifacts/scenarios/`. Demo builds also keep their build log under `artifacts/demo/`, preserving full-suite results.
-
-Each result records the command, exit code and artifact directory in the execution environment. The runner requires successful exit and complete expected output; guest programs check actual data, source preservation and guard bytes before reporting success. A host watchdog treats hangs as failures. GitHub Actions runs the same clean-container suite and uploads `artifacts/`.
-
-Interrupting the native runner with Ctrl-C or SIGTERM stops its child processes and keeps the UART and diagnostic output collected so far. The summary remains marked incomplete.
-
-For interactive debugging, use a scenario's recorded QEMU command with `-S -gdb tcp::1234` and attach a RISC-V-capable GDB using the matching ELF. Run QEMU directly so the test runner's watchdog does not end the debugging session.
-
-## License and references
-
-Firmware, scripts, shared register headers and documentation use MIT. QEMU device code, native QTest code and integration patches use GPL-2.0-or-later. See [LICENSE](LICENSE) and the [GPL text](LICENSES/GPL-2.0.txt).
-
-- [QEMU RISC-V virt platform](https://www.qemu.org/docs/master/system/riscv/virt.html)
-- [QTest framework](https://www.qemu.org/docs/master/devel/testing/qtest.html)
-- [Pinned QEMU board source](https://github.com/qemu/qemu/blob/v10.0.0/hw/riscv/virt.c)
+Licensing for the firmware and QEMU code is listed in [LICENSE](LICENSE).

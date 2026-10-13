@@ -4,12 +4,12 @@ set -eu
 cd "$(dirname "$0")/.."
 case "${1:-test}" in
     test)
-        run='python3 scripts/run-tests.py && ./scripts/run-demo.sh'
+        run='python3 scripts/run-tests.py && python3 scripts/run-tests.py --demo'
         build_log=artifacts/build.log
         summaries='artifacts/summary.json artifacts/demo/summary.json'
         ;;
     demo)
-        run='./scripts/run-demo.sh'
+        run='python3 scripts/run-tests.py --demo'
         build_log=artifacts/demo/build.log
         summaries=artifacts/demo/summary.json
         ;;
@@ -30,7 +30,7 @@ docker cp - "$container:/src" < build/source.tar
 docker exec "$container" chown -R root:root /src
 status=0
 echo "Building the virtual platform in Linux; output is retained in $build_log."
-docker exec "$container" sh -c "mkdir -p $(dirname "$build_log"); ./scripts/build-firmware.sh > $build_log 2>&1 && ./scripts/build-qemu.sh >> $build_log 2>&1 && $run" || status=$?
+docker exec "$container" sh -c "mkdir -p $(dirname "$build_log"); make build > $build_log 2>&1 && $run" || status=$?
 docker cp "$container:/src/artifacts/." artifacts/
 if [ "$status" -ne 0 ] && [ -f "$build_log" ]; then tail -n 80 "$build_log"; fi
 exit "$status"

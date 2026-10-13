@@ -54,7 +54,9 @@ def main():
     artifacts.mkdir(parents=True, exist_ok=True)
     for enabled in [False, True]:
         out = artifacts / ("dma.dtb" if enabled else "stock.dtb")
-        machine = f"virt,aia=none,dumpdtb={out}" + (",dma=on" if enabled else "")
+        # Escape QEMU's option delimiter in user-selected artifact paths.
+        dump_path = str(out).replace(",", ",,")
+        machine = f"virt,aia=none,dumpdtb={dump_path}" + (",dma=on" if enabled else "")
         subprocess.run(
             [
                 QEMU,

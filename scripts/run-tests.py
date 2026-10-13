@@ -152,10 +152,11 @@ def guest(scenario, demo=False, artifact_root=None):
     ]
     command.extend(scenario.get("options", []))
     if scenario.get("trace"):
-        (artifact_root / name).mkdir(parents=True, exist_ok=True)
+        # QEMU uses commas as option separators, even inside one argv entry.
+        trace_path = str(artifact_root / name / "model.trace").replace(",", ",,")
         command += [
             "-trace",
-            f"enable=virtual_dma_*,file={artifact_root / name}/model.trace",
+            f"enable=virtual_dma_*,file={trace_path}",
         ]
     return run(
         name, command, scenario["expected"], quiet=demo, artifact_root=artifact_root

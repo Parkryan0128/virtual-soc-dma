@@ -235,7 +235,7 @@ static const VMStateDescription vdma_vmstate = {
 static void vdma_class_init(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
-    dc->desc = "Educational single-channel virtual DMA";
+    dc->desc = "Single-channel virtual DMA";
     dc->user_creatable = false;
     dc->realize = vdma_realize;
     dc->vmsd = &vdma_vmstate;

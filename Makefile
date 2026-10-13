@@ -3,8 +3,8 @@
 test:
 	./scripts/test-in-container.sh
 demo:
-	./scripts/run-demo.sh --docker
+	./scripts/test-in-container.sh demo
 # Native/incremental build: run this target inside the Linux development image.
 build:
-	./scripts/build-firmware.sh
+	python3 scripts/build-firmware.py
 	./scripts/build-qemu.sh
