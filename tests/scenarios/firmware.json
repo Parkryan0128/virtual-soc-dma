@@ -116,5 +116,13 @@
     "expected": [
       "PASS IRQ API edges, PLIC reset and timer wrap\n"
     ]
+  },
+  {
+    "name": "irq_deadline",
+    "stage": "irq",
+    "trace": true,
+    "expected": [
+      "PASS IRQ submission deadline and delayed wait\n"
+    ]
   }
 ]

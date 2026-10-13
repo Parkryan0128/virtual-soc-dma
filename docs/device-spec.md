@@ -1,6 +1,6 @@
 # DMA device specification
 
-Implemented device contract (register interface version 1.0). Model, driver, and tests follow these rules. Any required change must update this document before the affected milestone is accepted.
+Register interface version 1.0. This contract is shared by the QEMU model, firmware driver and tests.
 
 ## Platform
 
@@ -105,4 +105,4 @@ Polling requests use `dma_submit` followed by `dma_poll`; IRQ requests use `dma_
 
 Both wait functions return 0 for a terminal device result (inspect status/error to distinguish DONE from ERROR), -1 for a driver timeout, -2 when no request/result exists, and -3 for a null output pointer. The -2/-3 paths preserve caller outputs and device state. Terminal results are consumed once. Polling timeout records status/error, resets the device and cancels any pending copy; IRQ timeout additionally drains PLIC state and restores device IRQ enable. The timeout snapshot rechecks STATUS to avoid combining BUSY with a later completion's pending bit.
 
-Deadlines use unsigned subtraction of the low 32-bit guest timer. The bounded waits are tested across counter wrap. IRQ deadlines start at submission; polling deadlines start when the caller begins waiting. A terminal polling result observed at the deadline is accepted. IRQ mode requires ISR delivery and still reports a timeout for an intentionally lost IRQ.
+Deadlines use unsigned subtraction of the low 32-bit guest timer. The bounded waits are tested across counter wrap. IRQ deadlines start at submission; polling deadlines start when the caller begins waiting. A terminal polling result observed at the deadline is accepted. IRQ mode requires ISR delivery on or before the submission deadline. A timely ISR result can be consumed later; an ISR delivered after the deadline returns TIMEOUT even if it ran before `dma_irq_wait`. That timeout preserves the terminal diagnostics, resets the request and permits reuse. An intentionally lost IRQ also times out.

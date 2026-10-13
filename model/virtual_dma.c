@@ -114,21 +114,30 @@ static uint64_t vdma_read(void *opaque, hwaddr addr, unsigned size)
 {
     VirtualDMAState *s = opaque;
     switch (addr) {
-    case DMA_ID: return DMA_ID_VALUE;
-    case DMA_VERSION: return DMA_VERSION_VALUE;
-    case DMA_SRC: return s->src;
-    case DMA_DST: return s->dst;
-    case DMA_LEN: return s->len;
-    case DMA_STATUS: return s->status;
-    case DMA_ERROR_CODE: return s->error;
-    case DMA_IRQ_ENABLE: return s->irq_enable;
-    case DMA_IRQ_PENDING: return s->irq_pending;
-    default: return 0;
+    case DMA_ID:
+        return DMA_ID_VALUE;
+    case DMA_VERSION:
+        return DMA_VERSION_VALUE;
+    case DMA_SRC:
+        return s->src;
+    case DMA_DST:
+        return s->dst;
+    case DMA_LEN:
+        return s->len;
+    case DMA_STATUS:
+        return s->status;
+    case DMA_ERROR_CODE:
+        return s->error;
+    case DMA_IRQ_ENABLE:
+        return s->irq_enable;
+    case DMA_IRQ_PENDING:
+        return s->irq_pending;
+    default:
+        return 0;
     }
 }
 
-static void vdma_write(void *opaque, hwaddr addr, uint64_t value,
-                       unsigned size)
+static void vdma_write(void *opaque, hwaddr addr, uint64_t value, unsigned size)
 {
     VirtualDMAState *s = opaque;
     uint32_t command;
@@ -137,9 +146,15 @@ static void vdma_write(void *opaque, hwaddr addr, uint64_t value,
         return;
     }
     switch (addr) {
-    case DMA_SRC: s->src = value; break;
-    case DMA_DST: s->dst = value; break;
-    case DMA_LEN: s->len = value; break;
+    case DMA_SRC:
+        s->src = value;
+        break;
+    case DMA_DST:
+        s->dst = value;
+        break;
+    case DMA_LEN:
+        s->len = value;
+        break;
     case DMA_IRQ_ENABLE:
         s->irq_enable = value & 1;
         vdma_update_irq(s);
@@ -151,8 +166,12 @@ static void vdma_write(void *opaque, hwaddr addr, uint64_t value,
             break;
         }
         switch (command) {
-        case DMA_START: vdma_start(s); break;
-        case DMA_RESET: vdma_reset(DEVICE(s)); break;
+        case DMA_START:
+            vdma_start(s);
+            break;
+        case DMA_RESET:
+            vdma_reset(DEVICE(s));
+            break;
         case DMA_ABORT:
             if (s->status == DMA_BUSY) {
                 timer_del(s->timer);
@@ -167,7 +186,8 @@ static void vdma_write(void *opaque, hwaddr addr, uint64_t value,
             break;
         }
         break;
-    default: break;
+    default:
+        break;
     }
 }
 
@@ -175,15 +195,15 @@ static const MemoryRegionOps vdma_ops = {
     .read = vdma_read,
     .write = vdma_write,
     .endianness = DEVICE_LITTLE_ENDIAN,
-    .valid = { .min_access_size = 4, .max_access_size = 4, .unaligned = false },
-    .impl = { .min_access_size = 4, .max_access_size = 4, .unaligned = false },
+    .valid = {.min_access_size = 4, .max_access_size = 4, .unaligned = false},
+    .impl = {.min_access_size = 4, .max_access_size = 4, .unaligned = false},
 };
 
 static void vdma_init(Object *obj)
 {
     VirtualDMAState *s = VIRTUAL_DMA(obj);
     memory_region_init_io(&s->mmio, obj, &vdma_ops, s, TYPE_VIRTUAL_DMA,
-                         VSOC_DMA_SIZE);
+                          VSOC_DMA_SIZE);
     sysbus_init_mmio(SYS_BUS_DEVICE(obj), &s->mmio);
     sysbus_init_irq(SYS_BUS_DEVICE(obj), &s->irq);
     s->timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, vdma_complete, s);
@@ -231,5 +251,8 @@ static const TypeInfo vdma_info = {
     .instance_finalize = vdma_finalize,
     .class_init = vdma_class_init,
 };
-static void vdma_register(void) { type_register_static(&vdma_info); }
+static void vdma_register(void)
+{
+    type_register_static(&vdma_info);
+}
 type_init(vdma_register)

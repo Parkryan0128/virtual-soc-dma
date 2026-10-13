@@ -5,12 +5,24 @@
 #include "platform_io.h"
 #include "dma_regs.h"
 #define DMA_TIMEOUT_TICKS 100000u
-static inline uint32_t dma_read(unsigned reg) { return mmio_read(VSOC_DMA_BASE + reg); }
-static inline void dma_write(unsigned reg, uint32_t value) { mmio_write(VSOC_DMA_BASE + reg, value); }
-static inline void dma_submit(uint32_t src, uint32_t dst, uint32_t len) {
-    dma_write(DMA_SRC, src); dma_write(DMA_DST, dst); dma_write(DMA_LEN, len); dma_write(DMA_COMMAND, DMA_START);
+static inline uint32_t dma_read(unsigned reg)
+{
+    return mmio_read(VSOC_DMA_BASE + reg);
 }
-typedef struct DMAResult { uint32_t status, error, pending; } DMAResult;
+static inline void dma_write(unsigned reg, uint32_t value)
+{
+    mmio_write(VSOC_DMA_BASE + reg, value);
+}
+static inline void dma_submit(uint32_t src, uint32_t dst, uint32_t len)
+{
+    dma_write(DMA_SRC, src);
+    dma_write(DMA_DST, dst);
+    dma_write(DMA_LEN, len);
+    dma_write(DMA_COMMAND, DMA_START);
+}
+typedef struct DMAResult {
+    uint32_t status, error, pending;
+} DMAResult;
 enum {
     DMA_WAIT_OK = 0,
     DMA_WAIT_TIMEOUT = -1,
