@@ -1,6 +1,6 @@
 # virtual-soc-dma
 
-A DMA device for QEMU and a bare-metal RISC-V driver. The firmware copies memory through MMIO, handles PLIC interrupts, and recovers from stalled transfers and missing interrupts.
+A custom DMA device for QEMU's RISC-V `virt` machine, with a bare-metal C driver. Tests cover memory copies, invalid requests, interrupts, cancellation, and recovery from stalled transfers or lost interrupts.
 
 The model uses a fixed completion delay (1 ms by default). It tests firmware behavior, not hardware bandwidth or bus timing.
 
@@ -26,45 +26,21 @@ python3 scripts/run-tests.py --demo
 
 Results go to `artifacts/summary.json`, with UART logs, QEMU diagnostics and DMA traces in each test's directory. Demo results live under `artifacts/demo/`. CI runs the same container tests and uploads these files.
 
-## Device
+## How it works
 
-The platform is fixed: QEMU `virt`, one RV32 hart, M-mode, 128 MiB RAM and PLIC (`aia=none`). Enable the device with `-M virt,dma=on,aia=none`; stock QEMU does not include it.
+The driver writes a source address, destination address and byte count to the DMA registers, then issues START. The device copies the bytes after its configured delay; the driver checks the result by polling or handling a PLIC interrupt.
 
-- RAM: `0x80000000`–`0x87ffffff`.
-- DMA registers: `0x10010000`–`0x10010fff`, aligned 32-bit little-endian access.
-- PLIC interrupt: 16.
-- One channel, RAM-to-RAM copies of 1–65,536 bytes. Byte-aligned buffers are allowed; overlapping buffers are rejected.
+## Device and driver
 
-Addresses and register constants are shared in [platform/](platform/).
+The device runs on QEMU `virt` with one RV32 hart, M-mode and 128 MiB RAM. It has one channel for RAM-to-RAM copies up to 64 KiB. Overlapping buffers are rejected.
 
-| Offset | Register | Meaning |
-| --- | --- | --- |
-| `0x00` | ID | `0x56444d41` (read-only) |
-| `0x04` | VERSION | `0x00010000` (read-only) |
-| `0x08` | SRC | Source address |
-| `0x0c` | DST | Destination address |
-| `0x10` | LEN | Byte count |
-| `0x14` | COMMAND | START=1, ABORT=2, ACK=4, RESET=8; reads as zero |
-| `0x18` | STATUS | IDLE=0, BUSY=1, DONE=2, ERROR=4 (read-only) |
-| `0x1c` | ERROR_CODE | Length=1, source=2, destination=3, overlap=4 (read-only) |
-| `0x20` | IRQ_ENABLE | Bit 0 enables the interrupt |
-| `0x24` | IRQ_PENDING | Sticky completion/error flag (read-only) |
+The [driver](firmware/drivers/dma.h) supports polling and interrupts, with one request at a time. See the [device and driver reference](docs/device.md) for registers, command behavior, return values and timeout rules.
 
-START accepts work only in IDLE and snapshots SRC/DST/LEN. Validation checks length, source range, destination range, then overlap. Invalid requests report an error without copying. A valid transfer reads the source and copies all bytes at completion, so leave both buffers alone while BUSY.
+## Tests and debugging
 
-Write one command bit at a time. START and SRC/DST/LEN writes are ignored while BUSY. ACK clears DONE/ERROR and the pending flag; ABORT cancels BUSY work; RESET cancels work and clears writable registers, including IRQ_ENABLE. ACK and ABORT preserve the transfer configuration. Reserved offsets/bits and writes to read-only registers are ignored. Unsupported access widths or alignment do not change device state.
+QTest checks registers, memory, timing and IRQ wiring. Guest firmware tests polling, interrupts, cancellation and recovery. Host tests cover the build scripts and test runner.
 
-Completion and errors set IRQ_PENDING; the IRQ line follows `IRQ_ENABLE && IRQ_PENDING`. The ISR records the result, ACKs the DMA, then completes the PLIC claim. Enabling IRQ after completion delivers the pending event.
-
-## Driver and tests
-
-The [driver](firmware/drivers/dma.h) has polling and interrupt APIs. Use one mode per request, from foreground code on the single hart. IRQ mode allows one outstanding request; consume or reset its result before submitting again.
-
-Wait results are `0` for a terminal result (check DONE/ERROR), `-1` for timeout, `-2` for no request and `-3` for a null output pointer. Invalid/no-request calls leave outputs and device state unchanged. Timeouts preserve diagnostics and reset the device; IRQ reset also drains old PLIC events and re-enables device IRQs.
-
-The 10 ms deadline starts at submission for IRQ mode and at wait for polling. IRQ mode requires timely ISR delivery: a result read later still succeeds, but a late or lost IRQ times out even if the copy finished. Cancel succeeds only while BUSY; if completion wins the race, its result remains available to wait.
-
-QTest checks registers, memory, timing and IRQ wiring. Guest firmware tests polling, interrupts, cancellation and recovery. Host tests cover the build scripts and test runner. Test faults are one-shot:
+Use these QEMU options to inject a one-shot fault or change the completion delay:
 
 ```text
 -global virtual-dma.stall-next=on       # next valid transfer stays BUSY
